@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import platform
 from collections.abc import AsyncIterator
 from typing import Any
@@ -37,6 +38,32 @@ import httpx
 from surveillance.api.auth import AuthError, SessionExpiredError, login
 from surveillance.api.models import ApiInfo
 from surveillance.config import ConnectionProfile
+
+
+_DEFAULT_HTTP_TIMEOUT = 30.0
+
+
+def _http_timeout_from_env() -> float:
+    """Per-request HTTP timeout, overridable with SURVEILLANCE_HTTP_TIMEOUT.
+
+    DSM's auth endpoint can stall far longer than its read-only APIs when the
+    recording volume is under write pressure: on the HQ NVR, SYNO.API.Info
+    answers in ~90 ms while SYNO.API.Auth login has been measured anywhere from
+    2.8 s to over 45 s. The stock 30 s ceiling turns those slow logins into a
+    bare "Connection failed", which reads like a wrong password. Raising it lets
+    a slow login finish instead of failing; it does not make it faster.
+    """
+
+    raw = os.environ.get("SURVEILLANCE_HTTP_TIMEOUT")
+    if not raw:
+        return _DEFAULT_HTTP_TIMEOUT
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_HTTP_TIMEOUT
+    return value if value > 0 else _DEFAULT_HTTP_TIMEOUT
+
+
 
 log = logging.getLogger(__name__)
 
@@ -189,7 +216,7 @@ class SurveillanceAPI:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 verify=self.profile.verify_ssl,
-                timeout=30.0,
+                timeout=_http_timeout_from_env(),
                 http2=True,
                 limits=httpx.Limits(
                     max_keepalive_connections=10,
