@@ -2645,8 +2645,20 @@ class LiveView(Gtk.Box):
         self._restore_layout_cameras(streaming)
         self._save_session()
 
+    def _camera_list_loaded(self) -> bool:
+        """Whether the NVR camera list has arrived.
+
+        Until it has, every slot is necessarily empty, so writing the slots
+        back would wipe the saved layout (for example while Surveillance
+        Station on the NVR is restarting). restore_session() fills them once
+        the list loads.
+        """
+        return bool(self.window.sidebar.cameras or self._cameras)
+
     def _save_layout_cameras(self) -> None:
         """Save camera assignments for the current layout to config."""
+        if not self._camera_list_loaded():
+            return
         cam_ids: list[int] = []
         for i in self._active:
             cam = self._slots[i].camera
@@ -3534,13 +3546,14 @@ class LiveView(Gtk.Box):
 
     def _save_session(self) -> None:
         """Persist grid layout and per-layout camera assignments to config."""
-        cam_ids: list[int] = []
-        for i in self._active:
-            cam = self._slots[i].camera
-            cam_ids.append(cam.id if cam else 0)
         self.app.config.grid_layout = self._current_layout
-        self.app.config.layout_cameras[self._current_layout] = cam_ids
-        log.debug("layout_cameras session save: [%s] = %s", self._current_layout, cam_ids)
+        if self._camera_list_loaded():
+            cam_ids: list[int] = []
+            for i in self._active:
+                cam = self._slots[i].camera
+                cam_ids.append(cam.id if cam else 0)
+            self.app.config.layout_cameras[self._current_layout] = cam_ids
+            log.debug("layout_cameras session save: [%s] = %s", self._current_layout, cam_ids)
         save_config_now(self.app.config)
         # Session changes (assign/clear a slot's camera) can change the
         # layout-accumulated row's own camera set.

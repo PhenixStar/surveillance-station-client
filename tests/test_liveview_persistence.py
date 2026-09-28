@@ -173,3 +173,43 @@ class TestCameraProtocolPersistence:
         loaded = load_config()
 
         assert loaded.camera_overrides[42] == "rtsp://10.0.0.1:554/stream1"
+
+
+class TestSaveWhileCameraListMissing:
+    """While the NVR camera list has not loaded (e.g. Surveillance Station is
+    restarting), every slot is empty; saving must not wipe the stored layout."""
+
+    def _fake_view(self, cameras: list[object]) -> object:
+        from types import SimpleNamespace
+
+        config = AppConfig(grid_layout="4x4")
+        config.layout_cameras["4x4"] = [10, 31, 46]
+        empty_slot = SimpleNamespace(camera=None)
+        return SimpleNamespace(
+            app=SimpleNamespace(config=config),
+            window=SimpleNamespace(sidebar=SimpleNamespace(cameras=cameras)),
+            _cameras=[],
+            _active=[0, 1, 2],
+            _slots=[empty_slot] * 3,
+            _current_layout="4x4",
+            _request_presence_refresh=lambda: None,
+        )
+
+    def test_layout_kept_without_camera_list(self, monkeypatch: object) -> None:
+        import surveillance.ui.liveview as lv
+
+        monkeypatch.setattr(lv, "save_config_now", lambda config: None)  # type: ignore[attr-defined]
+        view = self._fake_view(cameras=[])
+        view._camera_list_loaded = lambda: lv.LiveView._camera_list_loaded(view)  # type: ignore[attr-defined]
+        lv.LiveView._save_session(view)  # type: ignore[arg-type]
+        lv.LiveView._save_layout_cameras(view)  # type: ignore[arg-type]
+        assert view.app.config.layout_cameras["4x4"] == [10, 31, 46]  # type: ignore[attr-defined]
+
+    def test_layout_saved_once_camera_list_loaded(self, monkeypatch: object) -> None:
+        import surveillance.ui.liveview as lv
+
+        monkeypatch.setattr(lv, "save_config_now", lambda config: None)  # type: ignore[attr-defined]
+        view = self._fake_view(cameras=[object()])
+        view._camera_list_loaded = lambda: lv.LiveView._camera_list_loaded(view)  # type: ignore[attr-defined]
+        lv.LiveView._save_session(view)  # type: ignore[arg-type]
+        assert view.app.config.layout_cameras["4x4"] == [0, 0, 0]  # type: ignore[attr-defined]
