@@ -144,6 +144,12 @@ class MainWindow(Gtk.ApplicationWindow):
         self._grid_layout_action.connect("change-state", self._on_grid_layout_action)
         self.add_action(self._grid_layout_action)
 
+        # Target is the preset's index in config.layout_presets: preset names
+        # are free text and not valid detailed-action targets.
+        preset_action = Gio.SimpleAction.new("layout-preset", GLib.VariantType.new("i"))
+        preset_action.connect("activate", self._on_layout_preset_action)
+        self.add_action(preset_action)
+
         clear_action = Gio.SimpleAction.new("clear-layout", None)
         clear_action.connect("activate", self._on_clear_layout_action)
         self.add_action(clear_action)
@@ -160,6 +166,17 @@ class MainWindow(Gtk.ApplicationWindow):
         live_view = self.stack.get_child_by_name("live")
         if live_view and hasattr(live_view, "set_layout"):
             live_view.set_layout(value.get_string())
+
+    def _on_layout_preset_action(self, action: Gio.SimpleAction, value: GLib.Variant) -> None:
+        presets = list(self.app.config.layout_presets.values())
+        index = value.get_int32()
+        if not 0 <= index < len(presets):
+            return
+        preset = presets[index]
+        live_view = self.stack.get_child_by_name("live")
+        if live_view and hasattr(live_view, "apply_preset"):
+            live_view.apply_preset(preset.grid, preset.cameras)
+            self.sync_grid_layout(preset.grid)
 
     def _on_clear_layout_action(self, action: Gio.SimpleAction, param: None) -> None:
         live_view = self.stack.get_child_by_name("live")

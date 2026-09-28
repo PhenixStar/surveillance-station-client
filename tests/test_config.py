@@ -35,6 +35,7 @@ from surveillance.config import (
     AppConfig,
     ConnectionProfile,
     EventTypeHistory,
+    LayoutPreset,
     _config_from_data,
     _write_config,
     add_profile,
@@ -281,6 +282,34 @@ class TestEventTypeHistory:
             "types": [[513, 0]],
             "checked_until": 5,
         }
+
+
+class TestLayoutPresets:
+    def test_parses_and_skips_invalid_entries(self) -> None:
+        cfg = _config_from_data(
+            {
+                "layout_presets": {
+                    "SD": {"grid": "4x4", "cameras": [25, "15", "x"]},
+                    "Bad grid": {"grid": "5x5", "cameras": [1]},
+                    "No grid": {"cameras": [1]},
+                }
+            }
+        )
+        assert cfg.layout_presets == {"SD": LayoutPreset(grid="4x4", cameras=[25, 15])}
+
+    def test_round_trips_in_order(self, tmp_path: Path, monkeypatch: object) -> None:
+        import surveillance.config as cfg
+
+        monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "config.toml")  # type: ignore[attr-defined]
+        monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)  # type: ignore[attr-defined]
+
+        config = AppConfig()
+        config.layout_presets["Front of house"] = LayoutPreset(grid="4x4", cameras=[1, 25])
+        config.layout_presets["Back office"] = LayoutPreset(grid="3x3", cameras=[20, 5])
+        _write_config(config)
+        loaded = load_config()
+        assert list(loaded.layout_presets) == ["Front of house", "Back office"]
+        assert loaded.layout_presets["Back office"] == LayoutPreset(grid="3x3", cameras=[20, 5])
 
 
 class TestSettingOverrides:

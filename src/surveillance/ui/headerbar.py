@@ -243,16 +243,22 @@ class AppHeaderBar(Gtk.HeaderBar):
         )
 
     def _build_grid_menu(self) -> None:
-        """Build the grid button menu: layout choice plus clear current layout."""
+        """Build the grid button menu: layout choice, presets, clear current layout."""
         layouts = Gio.Menu()
         for layout_name in LAYOUT_VISIBLE:
             layouts.append(layout_name, f"win.grid-layout::{layout_name}")
+
+        presets = Gio.Menu()
+        for index, (name, preset) in enumerate(self.app.config.layout_presets.items()):
+            presets.append(f"{name} ({preset.grid})", f"win.layout-preset({index})")
 
         clear = Gio.Menu()
         clear.append("Clear Current Layout", "win.clear-layout")
 
         menu = Gio.Menu()
         menu.append_section(None, layouts)
+        if presets.get_n_items():
+            menu.append_section("Presets", presets)
         menu.append_section(None, clear)
         self.grid_btn.set_menu_model(menu)
 

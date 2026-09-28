@@ -2626,6 +2626,25 @@ class LiveView(Gtk.Box):
         self._restore_layout_cameras(streaming)
         self._save_session()
 
+    def apply_preset(self, grid: str, cam_ids: list[int]) -> None:
+        """Switch to *grid* and fill it with a layout preset's cameras.
+
+        The preset becomes that grid's saved camera set, replacing any
+        manual assignment made in it, so it is still shown after a restart.
+        """
+        if grid not in LAYOUT_VISIBLE:
+            return
+        if grid != self._current_layout:
+            self._save_layout_cameras()
+            streaming = frozenset(self._active)
+            self._current_layout = grid
+            self._apply_layout()
+        else:
+            streaming = frozenset(self._active)
+        self.app.config.layout_cameras[grid] = list(cam_ids)
+        self._restore_layout_cameras(streaming)
+        self._save_session()
+
     def _save_layout_cameras(self) -> None:
         """Save camera assignments for the current layout to config."""
         cam_ids: list[int] = []

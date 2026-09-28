@@ -40,6 +40,9 @@ from typing import Any
 
 import tomli_w
 
+# GTK-free module (see its docstring), safe to import from config.
+from surveillance.ui.layouts import LAYOUT_VISIBLE
+
 log = logging.getLogger(__name__)
 
 
@@ -123,6 +126,33 @@ class EventTypeHistory:
 
 
 @dataclass
+class LayoutPreset:
+    """A named camera set for one grid size, picked from the grid menu.
+
+    Presets are hand-edited in config.toml under [layout_presets."<name>"]
+    and are never changed by the app itself.
+    """
+
+    grid: str
+    cameras: list[int] = field(default_factory=list)
+
+
+def _load_layout_presets(data: dict[str, Any]) -> dict[str, LayoutPreset]:
+    """Parse [layout_presets], skipping entries with an unknown grid."""
+    presets: dict[str, LayoutPreset] = {}
+    for name, pdata in data.get("layout_presets", {}).items():
+        if not isinstance(pdata, dict) or pdata.get("grid") not in LAYOUT_VISIBLE:
+            log.warning("Ignoring layout preset %r: unknown or missing grid", name)
+            continue
+        cameras: list[int] = []
+        for cam_id in pdata.get("cameras", []):
+            with contextlib.suppress(ValueError, TypeError):
+                cameras.append(int(cam_id))
+        presets[str(name)] = LayoutPreset(grid=pdata["grid"], cameras=cameras)
+    return presets
+
+
+@dataclass
 class AppConfig:
     """Application configuration."""
 
@@ -138,6 +168,7 @@ class AppConfig:
     grid_layout: str = "2x2"
     last_page: str = "live"
     layout_cameras: dict[str, list[int]] = field(default_factory=dict)
+    layout_presets: dict[str, LayoutPreset] = field(default_factory=dict)
     poll_interval_cameras: int = 30
     poll_interval_alerts: int = 30
     poll_interval_homemode: int = 60
@@ -476,6 +507,7 @@ def _config_from_data(data: dict[str, Any]) -> AppConfig:
         dismissed_update_version=general.get("dismissed_update_version", ""),
         grid_layout=session.get("grid_layout", general.get("grid_layout", "2x2")),
         last_page=session.get("last_page", "live"),
+        layout_presets=_load_layout_presets(data),
         poll_interval_cameras=_poll_interval(general, "poll_interval_cameras", 30),
         poll_interval_alerts=_poll_interval(general, "poll_interval_alerts", 30),
         poll_interval_homemode=_poll_interval(general, "poll_interval_homemode", 60),
@@ -571,6 +603,10 @@ def _write_config(config: AppConfig) -> None:
         "setting_overrides": dict(config.setting_overrides),
         "setting_overrides_bool": dict(config.setting_overrides_bool),
         "setting_overrides_choice": dict(config.setting_overrides_choice),
+        "layout_presets": {
+            name: {"grid": preset.grid, "cameras": list(preset.cameras)}
+            for name, preset in config.layout_presets.items()
+        },
         "profiles": {},
     }
 
