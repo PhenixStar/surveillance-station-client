@@ -23,50 +23,151 @@
 <details>
 <summary><b>Live View</b></summary>
 
-Real-time camera streams in 1&times;1, 2&times;2, 3&times;3, or 4&times;4 grid layouts, selected from the grid button in the header bar. Each layout keeps its own camera arrangement. Clear a single slot from the camera sidebar or the whole layout from the same grid menu, with a confirmation prompt. Scroll to zoom in on a slot (centered on the cursor) and click-and-drag to pan; zoom resets when switching layouts or leaving the page. Streams are muted by default; hover a slot to reveal a toolbar with mute/volume (remembered per camera) and a quick Snapshot button. Audio reaches the player over the RTSP-family protocols (`rtsp`, `rtsp_over_http`, `multicast`, `direct`), or over the default `auto`/`websocket` protocol when the camera's audio codec is PCMU or AAC (muxed in via ffmpeg); otherwise the mute button stays greyed out until the protocol is changed (or DSM reports a different codec) by right-clicking the camera in the sidebar. A camera with no audio track gets no mute button at all. A muxed camera that stops sending audio for three seconds while its video keeps arriving keeps playing without sound until its stream is restarted, rather than holding up its own video; its volume control greys out as soon as that happens. In History mode a gap is filled with silence instead, since DSM sends no audio at some playback speeds or in reverse. Sound returns automatically when DSM resumes sending audio at supported playback speeds. Cameras with a speaker also get a push-to-talk microphone button &mdash; tap to start talking, tap again to stop. Hardware-accelerated rendering via mpv + OpenGL. Works on X11 and Wayland. While a slot plays recorded video from close to the live edge, the client also re-asks DSM every few seconds how far that recording now runs, since one still being written grows after it was first looked up. The client sends a periodic keepalive to hold each WebSocket session open; if a session is ever interrupted anyway (a network blip, a NAS restart), it reconnects on the same pipe transparently, with no visible interruption. A camera the server reports as disabled or disconnected shows an "offline" placeholder instead of freezing, and a WebSocket or RTSP stream that stops responding mid-session shows "stream lost" ("attempting reconnect" while retrying) &mdash; both recover automatically and restore the real feed as soon as the camera is reachable again, with no action needed, and a slot that was showing recorded video comes back to the same moment rather than jumping to live. A slot keeps its stream when a layout switch leaves its camera in the same position, so a single feed that has drifted behind or stopped moving is restarted with **Reload** in the slot's right-click menu, without disturbing the other slots; a slot showing recorded video reloads at the same moment rather than returning to live. The reload button in the header bar does the same for every slot in the layout, one after another rather than all in the same instant.
+Real-time camera streams in 1&times;1, 2&times;2, 3&times;3, or 4&times;4 grid layouts, selected from the grid button in the header bar. Each layout keeps its own camera arrangement. Clear a single slot from the camera sidebar or the whole layout from the same grid menu, with a confirmation prompt. Scroll to zoom in on a slot (centered on the cursor) and click-and-drag to pan; zoom resets when switching layouts or leaving the page.
+
+<p align="center">
+  <img src="assets/screenshots/live-view-slot-menu.webp" alt="Right-click menu of a Live View slot">
+</p>
+
+A slot keeps its stream when a layout switch leaves its camera in the same position, so a single feed that has drifted behind or stopped moving is restarted with **Reload** in the slot's right-click menu, without disturbing the other slots; a slot showing recorded video reloads at the same moment rather than returning to live. The reload button in the header bar does the same for every slot in the layout, one after another rather than all in the same instant.
+
+Streams are muted by default; hover a slot to reveal a toolbar with mute/volume (remembered per camera) and a quick Snapshot button. Audio reaches the player over the RTSP-family protocols (`rtsp`, `rtsp_over_http`, `multicast`, `direct`), or over the default `auto`/`websocket` protocol when the camera's audio codec is PCMU or AAC (muxed in via ffmpeg); otherwise the mute button stays greyed out until the protocol is changed (or DSM reports a different codec) by right-clicking the camera in the sidebar. A camera with no audio track gets no mute button at all. A muxed camera that stops sending audio for three seconds while its video keeps arriving keeps playing without sound until its stream is restarted, rather than holding up its own video; its volume control greys out as soon as that happens. In History mode a gap is filled with silence instead, since DSM sends no audio at some playback speeds or in reverse. Sound returns automatically when DSM resumes sending audio at supported playback speeds. Cameras with a speaker also get a push-to-talk microphone button &mdash; tap to start talking, tap again to stop. Hardware-accelerated rendering via mpv + OpenGL. Works on X11 and Wayland. While a slot plays recorded video from close to the live edge, the client also re-asks DSM every few seconds how far that recording now runs, since one still being written grows after it was first looked up. The client sends a periodic keepalive to hold each WebSocket session open; if a session is ever interrupted anyway (a network blip, a NAS restart), it reconnects on the same pipe transparently, with no visible interruption. A camera the server reports as disabled or disconnected shows an "offline" placeholder instead of freezing, and a WebSocket or RTSP stream that stops responding mid-session shows "stream lost" ("attempting reconnect" while retrying) &mdash; both recover automatically and restore the real feed as soon as the camera is reachable again, with no action needed, and a slot that was showing recorded video comes back to the same moment rather than jumping to live.
 </details>
 <details>
 <summary><b>Timeline</b></summary>
 
-A shared timeline strip below the video grid, toggled from the header bar (persists across restarts). Scroll or use the zoom buttons to zoom the time scale (centered on the cursor), click-and-drag to pan; a thin blue border marks which slot's camera the timeline is currently tracking &mdash; it follows the last-clicked slot, defaults to the upper-left slot on layout load, and fades after 10 seconds of no activity anywhere in the window. Hovering the ruler shows a small preview thumbnail of that camera at the hovered time, with its date/time overlaid. In History mode, a date/time bubble follows the marker as it moves. Below the ruler, a recording-presence bar shows two rows: where the tracked slot's own camera has a recording, and where any camera in the current layout does. Clicking a point on the ruler switches every slot in the current layout into History mode, each playing its own camera's recorded video from that time; a **Live** button returns every slot to the real-time stream. Picking a different camera into a slot already in History mode keeps playing recorded video, for the newly picked camera, at the same point in time, rather than dropping back to live; switching grid layout always returns to live first. Pan/tilt/zoom, focus, preset, patrol, and push-to-talk are unavailable while a slot shows recorded video (mute/volume and Snapshot remain available). Jump &plusmn;10s buttons seek every slot in the current layout the same way clicking the ruler does, coalescing a burst of rapid clicks into a single request rather than firing one per click. A **Pause** button freezes every active slot in place &mdash; a live slot just freezes locally without leaving Live mode, while a History slot asks DSM to actually stop sending, so the gap behind wall clock grows for as long as it stays paused; resuming a History slot paused for under 10 seconds lands at least 10 seconds behind live rather than right at the edge. A Pause ends by itself on pressing **Live**, on leaving the page and coming back, and on switching layout: a page round-trip starts every slot afresh, while the other two resume whatever they leave running and restart only what they replace. A stream that starts while a Pause is on joins it, so a camera picked into a paused layout is frozen with the rest. A playback-speed dropdown (History mode only) offers 1/8x through 100x plus a Fwd/Rev direction toggle, applied to every active History slot at once; it resets to 1x/Fwd whenever a slot returns to Live or the layout switches. The higher speeds are greyed out on the larger layouts, since DSM really does send that many more frames per second and every slot has to decode them: by default, 1&times;1 offers the full range, 2&times;2 stops at 16x, 3&times;3 at 8x, and 4&times;4 at 4x &mdash; adjustable from the Settings page, with 1x always on offer whatever the budget. Real motion/alarm events are overlaid on the same two presence rows as orange markers. **Previous event**/**Next event** jump to the nearest one on either side of the current position, across every camera in the layout; Previous stays available in Live mode (dropping into History first, like Back 10s), while Next is History-only, like Forward 10s. Shortly after landing on an event, Previous goes on to the one before it; once you have watched it for a while, Previous returns to its start instead. How long counts as "shortly" grows with how wide the timeline is zoomed (10 to 30 seconds) and with the playback speed. Next skips only what a jump has just landed on. Playing in reverse it is all mirrored: events are entered at their end, and the grace period applies to Next. Events already loaded for the timeline are used straight away; past those, the search widens step by step (an hour, a day, a week) while the button pulses. Events within 10 seconds of wall clock are skipped, since a seek that close would just be clamped back to the live edge anyway. A calendar button opens a date/time picker, its own days marked and any day without a recording (across the current layout) refused, and its **Jump** button greyed out until the exact date/time selected falls within a real recording; jumping there re-centers the timeline at its default zoom, while Back/Forward 10s and Previous/Next event instead just pan (at whatever zoom is already set) if their own target would otherwise land off-screen. A **Filter events** button narrows the presence bar's event markers and Previous/Next event navigation down to chosen event types (a multi-select; on Surveillance Station 9.3 and later it lists every event type the NAS supports and matches Any of them). Before 9.3 it matches Any or All of them, and opening it scans each layout camera's full recording history for the types it has ever produced (a persisted, incrementally-updated cache, so only the first scan and any time elapsed since the last one cost real seconds), showing a per-camera progress checklist meanwhile. While a filter is active, the button's icon is drawn in the same orange as the event markers. A **Download** button opens a popup with a camera picker (only cameras currently assigned to a slot in the layout, since some may be empty, and defaulting to the tracked slot's own camera), above two tabs: Quick Save, whose three one-click buttons immediately prompt for a save location and download around the tracked slot's current position &mdash; **Download last 1/2/5 min** up to it in Live mode, or **Download &minus;1/2/5 to +1/2/5 min** centered on it in History mode, since both directions are already available once paused on a moment of interest &mdash; and Custom Save, with Start/End date-time fields (defaulting to a short clip ending at the same point) for an exact range. Either tab can pick a range that starts before or runs past what has actually been recorded, easy to do close to live; the clip is trimmed to what exists rather than refused. A range with no recording in it at all is refused rather than filled from the nearest recording.
+A shared timeline strip below the video grid, toggled from the header bar (persists across restarts). Scroll or use the zoom buttons to zoom the time scale (centered on the cursor), click-and-drag to pan; a thin blue border marks which slot's camera the timeline is currently tracking &mdash; it follows the last-clicked slot, defaults to the upper-left slot on layout load, and fades after 10 seconds of no activity anywhere in the window.
+
+<p align="center">
+  <img src="assets/screenshots/timeline-live.webp" alt="Timeline following the live stream" width="100%">
+</p>
+
+Hovering the ruler shows a small preview thumbnail of that camera at the hovered time, with its date/time overlaid.
+
+<p align="center">
+  <img src="assets/screenshots/timeline-history.webp" alt="Timeline in History mode, with speed, step and Live controls" width="100%">
+</p>
+
+In History mode, a date/time bubble follows the marker as it moves. Below the ruler, a recording-presence bar shows two rows: where the tracked slot's own camera has a recording, and where any camera in the current layout does. Clicking a point on the ruler switches every slot in the current layout into History mode, each playing its own camera's recorded video from that time; a **Live** button returns every slot to the real-time stream. Picking a different camera into a slot already in History mode keeps playing recorded video, for the newly picked camera, at the same point in time, rather than dropping back to live; switching grid layout always returns to live first. Pan/tilt/zoom, focus, preset, patrol, and push-to-talk are unavailable while a slot shows recorded video (mute/volume and Snapshot remain available).
+
+Jump &plusmn;10s buttons seek every slot in the current layout the same way clicking the ruler does, coalescing a burst of rapid clicks into a single request rather than firing one per click. A **Pause** button freezes every active slot in place &mdash; a live slot just freezes locally without leaving Live mode, while a History slot asks DSM to actually stop sending, so the gap behind wall clock grows for as long as it stays paused; resuming a History slot paused for under 10 seconds lands at least 10 seconds behind live rather than right at the edge. A Pause ends by itself on pressing **Live**, on leaving the page and coming back, and on switching layout: a page round-trip starts every slot afresh, while the other two resume whatever they leave running and restart only what they replace. A stream that starts while a Pause is on joins it, so a camera picked into a paused layout is frozen with the rest.
+
+<p align="center">
+  <img src="assets/screenshots/timeline-playback-speed.webp" alt="Timeline playback speed and direction">
+</p>
+
+A playback-speed dropdown (History mode only) offers 1/8x through 100x plus a Fwd/Rev direction toggle, applied to every active History slot at once; it resets to 1x/Fwd whenever a slot returns to Live or the layout switches. The higher speeds are greyed out on the larger layouts, since DSM really does send that many more frames per second and every slot has to decode them: by default, 1&times;1 offers the full range, 2&times;2 stops at 16x, 3&times;3 at 8x, and 4&times;4 at 4x &mdash; adjustable from the Settings page, with 1x always on offer whatever the budget. Real motion/alarm events are overlaid on the same two presence rows as orange markers. **Previous event**/**Next event** jump to the nearest one on either side of the current position, across every camera in the layout; Previous stays available in Live mode (dropping into History first, like Back 10s), while Next is History-only, like Forward 10s. Shortly after landing on an event, Previous goes on to the one before it; once you have watched it for a while, Previous returns to its start instead. How long counts as "shortly" grows with how wide the timeline is zoomed (10 to 30 seconds) and with the playback speed. Next skips only what a jump has just landed on. Playing in reverse it is all mirrored: events are entered at their end, and the grace period applies to Next. Events already loaded for the timeline are used straight away; past those, the search widens step by step (an hour, a day, a week) while the button pulses. Events within 10 seconds of wall clock are skipped, since a seek that close would just be clamped back to the live edge anyway.
+
+<p align="center">
+  <img src="assets/screenshots/timeline-date-picker.webp" alt="Timeline date and time picker">
+</p>
+
+A calendar button opens a date/time picker, its own days marked and any day without a recording (across the current layout) refused, and its **Jump** button greyed out until the exact date/time selected falls within a real recording; jumping there re-centers the timeline at its default zoom, while Back/Forward 10s and Previous/Next event instead just pan (at whatever zoom is already set) if their own target would otherwise land off-screen.
+
+<p align="center">
+  <img src="assets/screenshots/timeline-event-filter.webp" alt="Timeline event type filter">
+</p>
+
+A **Filter events** button narrows the presence bar's event markers and Previous/Next event navigation down to chosen event types (a multi-select; on Surveillance Station 9.3 and later it lists every event type the NAS supports and matches Any of them). Before 9.3 it matches Any or All of them, and opening it scans each layout camera's full recording history for the types it has ever produced (a persisted, incrementally-updated cache, so only the first scan and any time elapsed since the last one cost real seconds), showing a per-camera progress checklist meanwhile. While a filter is active, the button's icon is drawn in the same orange as the event markers.
+
+<p align="center">
+  <img src="assets/screenshots/timeline-download-quick.webp" alt="Timeline quick download">
+  <img src="assets/screenshots/timeline-download-custom.webp" alt="Timeline custom download range">
+</p>
+
+A **Download** button opens a popup with a camera picker (only cameras currently assigned to a slot in the layout, since some may be empty, and defaulting to the tracked slot's own camera), above two tabs: Quick Save, whose three one-click buttons immediately prompt for a save location and download around the tracked slot's current position &mdash; **Download last 1/2/5 min** up to it in Live mode, or **Download &minus;1/2/5 to +1/2/5 min** centered on it in History mode, since both directions are already available once paused on a moment of interest &mdash; and Custom Save, with Start/End date-time fields (defaulting to a short clip ending at the same point) for an exact range. Either tab can pick a range that starts before or runs past what has actually been recorded, easy to do close to live; the clip is trimmed to what exists rather than refused. A range with no recording in it at all is refused rather than filled from the nearest recording.
 </details>
 <details>
 <summary><b>Recordings</b></summary>
 
-Browse, filter by camera, play back with full transport controls (seek, pause, volume, scroll-to-zoom, click-and-drag pan), and download to disk. Quick date presets (Today, Yesterday, Last 24 hrs, Last 7 days) for one-click filtering, plus advanced search by camera(s) and custom time range. Reset button clears all filters at once. Active filter summary always visible. Per-event thumbnails and smart detection labels (person, vehicle, animal, etc.) shown for each recording.
+<p align="center">
+  <img src="assets/screenshots/recordings.webp" alt="Recordings page" width="100%">
+</p>
+
+Browse, filter by camera, play back with full transport controls (seek, pause, volume, scroll-to-zoom, click-and-drag pan), and download to disk. Quick date presets (Today, Yesterday, Last 24 hrs, Last 7 days) for one-click filtering. Per-event thumbnails and smart detection labels (person, vehicle, animal, etc.) shown for each recording.
+
+<p align="center">
+  <img src="assets/screenshots/recordings-search.webp" alt="Recordings advanced search" width="300">
+</p>
+
+Advanced search by camera(s) and custom time range. Reset button clears all filters at once. Active filter summary always visible.
 </details>
 <details>
-<summary><b>PTZ Control</b></summary>
+<summary><b>Camera Controls</b></summary>
+
+<p align="center">
+  <img src="assets/screenshots/camera-controls.webp" alt="Slot toolbar with the PTZ pad open">
+</p>
 
 Pan/Tilt, Zoom, Focus, Preset, and Patrol controls for PTZ-capable cameras, in the same per-slot hover toolbar as Live View's audio controls. Picking a patrol asks Surveillance Station to run that saved route; the NAS drives the camera, so it keeps going after you switch cameras or quit. Routes are created and edited in Surveillance Station itself, and there is no stop control, the same as Synology's own clients.
 </details>
 <details>
 <summary><b>Snapshots</b></summary>
 
+<p align="center">
+  <img src="assets/screenshots/snapshots.webp" alt="Snapshots page" width="100%">
+</p>
+
 Browse saved snapshots, filter by camera and time range, view, download, or delete. Take a snapshot straight from a Live View slot's right-click menu, which saves it to the snapshot database and offers a local copy. The full-size viewer supports scroll-to-zoom and click-and-drag panning.
 </details>
 <details>
 <summary><b>Time Lapse</b></summary>
 
+<p align="center">
+  <img src="assets/screenshots/time-lapse.webp" alt="Time Lapse page" width="100%">
+</p>
+
 Browse, play back, download, lock/unlock, and delete Smart Time Lapse recordings. Filter by time lapse task.
 </details>
 <details>
-<summary><b>Events & Alerts</b></summary>
+<summary><b>Events</b></summary>
 
-Browse real events by their type and time, filter by event type (quick filter plus a multi-select in advanced search, matching Any or All of the selected types) and by camera. On Surveillance Station 9.3 and later, events and their types come from the Event Center, the same as DSM's own Event Center app: motion, audio, tampering, people/vehicle/animal object detection, intrusion, enter/exit, missing and unattended objects, and more. The type filters then always list every event type the NAS supports, as DSM's own Event Center does, and match Any of the selected ones: one event has exactly one type there. Before 9.3, events are decoded from each camera's own detected categories in the recording-interval bitmask, brand-dependent &mdash; see `LEGACY_EVENT_BITMASK.md`. Notification bell with unread badge and alert popover, polled every 30 seconds.
+<p align="center">
+  <img src="assets/screenshots/events.webp" alt="Events page" width="100%">
+</p>
+
+Browse real events by their type and time, filtered by event type, camera and time range, from quick filters or advanced search.
+
+<p align="center">
+  <img src="assets/screenshots/events-search.webp" alt="Events advanced search" width="300">
+</p>
+
+On Surveillance Station 9.3 and later, events and their types come from the Event Center, the same as DSM's own Event Center app: motion, audio, tampering, people/vehicle/animal object detection, intrusion, enter/exit, missing and unattended objects, and more. The type filters then always list every event type the NAS supports, as DSM's own Event Center does, and match Any of the selected ones: one event has exactly one type there. Before 9.3, events are decoded from each camera's own detected categories in the recording-interval bitmask, brand-dependent, and the type filters can also match All of the selected types &mdash; see `LEGACY_EVENT_BITMASK.md`.
+</details>
+<details>
+<summary><b>Notifications</b></summary>
+
+Notification bell in the header bar with an unread badge and a popover listing Surveillance Station's newest notifications (motion, connection lost/restored, alarm, camera disabled/enabled), polled every 30 seconds. **Mark these read** clears them on the NAS.
 </details>
 <details>
 <summary><b>Home Mode</b></summary>
+
+<p align="center">
+  <img src="assets/screenshots/title-bar.webp" alt="Title bar with Home Mode button on the left">
+</p>
 
 Toggle Surveillance Station home mode directly from the header bar.
 </details>
 <details>
 <summary><b>License Management</b></summary>
 
+<p align="center">
+  <img src="assets/screenshots/licenses.webp" alt="Licenses page" width="100%">
+</p>
+
 View, add, and delete camera licenses. Online and offline activation.
 </details>
 <details>
 <summary><b>Settings</b></summary>
+
+<p align="center">
+  <img src="assets/screenshots/settings.webp" alt="Settings page" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/camera-settings-websocket.webp" alt="Camera Settings for a WebSocket camera" width="25%">
+  <img src="assets/screenshots/camera-settings-rtsp.webp" alt="Camera Settings for an RTSP camera" width="25%">
+</p>
 
 Choose which Surveillance Station stream profile Live View plays (see [Live View stream profile](#live-view-stream-profile) below), tune the demuxer cache sizes used for each streaming profile (plain RTSP, WebSocket muxed-audio, and silent WebSocket), the extra buffer added automatically at high History playback speeds, the shared demuxer byte cap, the cap on each player's back buffer, and the speed&times;slots budget the Live View timeline's History speed dropdown enforces, plus an on-screen readout of cache depth/target/effective speed for diagnosing buffering. Each setting has its own reset-to-default button, plus one that resets everything on the page at once. Changes apply to the next stream that starts (the on-screen readout takes effect immediately, and the speed budget the next time the speed dropdown opens) and persist across restarts.
 </details>
@@ -83,6 +184,10 @@ MFA/OTP login support. When 2FA is enabled on your Synology account, the client 
 <details>
 <summary><b>Multi-Profile</b></summary>
 
+<p align="center">
+  <img src="assets/screenshots/login.webp" alt="Login dialog with a saved profile">
+</p>
+
 Save multiple NAS connection profiles and switch between them from the login screen.
 </details>
 <details>
@@ -97,6 +202,10 @@ Auto (follow OS), dark, or light theme selectable from the header bar.
 </details>
 <details>
 <summary><b>About & Updates</b></summary>
+
+<p align="center">
+  <img src="assets/screenshots/about.webp" alt="About page with an update notice" width="100%">
+</p>
 
 An About page shows the version, license, and repository links. On login the client checks the GitHub releases page once for a newer version and, if one exists, marks the About entry until you have seen it.
 </details>
@@ -576,7 +685,8 @@ surveillance-station-client/
 ├── appimage_entry.py                    PyInstaller entry point
 ├── assets/
 │   ├── banner.svg                       README banner image
-│   └── divider.svg                      README section divider
+│   ├── divider.svg                      README section divider
+│   └── screenshots/                     README feature screenshots (WebP)
 ├── scripts/
 │   └── dump_event_map.py                diagnostic tool for extending LEGACY_EVENT_BITMASK.md
 ├── data/

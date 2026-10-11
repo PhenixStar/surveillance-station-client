@@ -178,7 +178,7 @@ Active filter summary always visible. Per-event thumbnails are shown for each re
 The playback window supports scroll-to-zoom (centered on the cursor) and
 click-and-drag panning, same as Live View.
 .TP
-.B PTZ Control
+.B Camera Controls
 Control pan-tilt-zoom cameras with Pan/Tilt, Zoom, Focus, Preset, and Patrol
 controls, in the same per-slot hover toolbar as Live View's audio controls.
 Picking a patrol asks Surveillance Station to run that saved route; the NAS
@@ -196,13 +196,17 @@ click-and-drag panning.
 .B Time Lapse
 Browse, play back, download, and manage Smart Time Lapse recordings.
 .TP
-.B Events & Alerts
-Browse real events decoded from each camera's own detected categories
-(motion, audio, tampering, person/vehicle/pet, and more, brand-dependent)
-with their type and time, filtered by event type, camera, and time range.
-Advanced search can match Any or All of several selected event types at
-once. Camera alerts appear in the notification popover with an unread
-badge.
+.B Events
+Browse real events with their type and time, filtered by event type, camera,
+and time range. On Surveillance Station 9.3 and later, events and their types
+come from the Event Center (motion, audio, tampering, people/vehicle/animal
+object detection, intrusion, and more). Before 9.3 they are decoded from each
+camera's own detected categories (brand-dependent), and advanced search can
+match Any or All of several selected event types at once.
+.TP
+.B Notifications
+Surveillance Station's notifications appear in the header bar's notification
+popover with an unread badge.
 .TP
 .B Home Mode
 Toggle Surveillance Station home mode from the header bar.
