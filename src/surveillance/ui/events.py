@@ -607,8 +607,18 @@ class EventsView(Gtk.Box):
             self._search_to_time,
             self._search_time_preset,
         )
-        self.app.config.events_search_event_types = self._search_event_types or []
-        self.app.config.events_search_event_types_match_all = self._search_event_types_match_all
+        # The saved types are shared by every profile, and loading dropped
+        # the other backend's keys. Keep them for the NAS they belong to,
+        # and its Any/All choice too when this backend offers none.
+        backend = self.app.event_backend
+        other_keys = [
+            key
+            for key in self.app.config.events_search_event_types
+            if not backend.is_filter_key(key)
+        ]
+        self.app.config.events_search_event_types = other_keys + (self._search_event_types or [])
+        if backend.supports_match_all:
+            self.app.config.events_search_event_types_match_all = self._search_event_types_match_all
         save_config(self.app.config)
 
     def _current_type_options(self) -> list[tuple[str, str, str]]:

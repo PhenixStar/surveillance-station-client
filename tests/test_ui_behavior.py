@@ -1182,6 +1182,7 @@ class TestQuickCameraPickIsSaved:
         import importlib
 
         import surveillance.config as config_module
+        from surveillance.services.legacy_event import LegacyEventBackend
 
         page_module = importlib.import_module(f"surveillance.ui.{module}")
         monkeypatch.setattr(config_module, "save_config", lambda cfg: None)
@@ -1190,7 +1191,7 @@ class TestQuickCameraPickIsSaved:
         config = AppConfig()
         setattr(config, f"{prefix}_camera_ids", [1, 2])
         page = SimpleNamespace(
-            app=SimpleNamespace(config=config),
+            app=SimpleNamespace(config=config, event_backend=LegacyEventBackend()),
             camera_combo=self._Combo(),
             _search_camera_ids=[1, 2],
             _search_from_time=None,
@@ -1369,6 +1370,39 @@ class TestEventsSavedTypeKeys:
         )
         EventsView._load_search_from_config(page)
         assert page._search_event_types is None
+
+    def test_saving_keeps_the_other_backends_keys(self) -> None:
+        from surveillance.config import AppConfig
+        from surveillance.services.event_center import EventCenterBackend
+        from surveillance.services.legacy_event import LegacyEventBackend
+        from surveillance.ui.events import EventsView
+
+        config = AppConfig(
+            events_search_event_types=["08", "25:hikvision"],
+            events_search_event_types_match_all=True,
+        )
+
+        def page(backend: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                app=SimpleNamespace(config=config, event_backend=backend),
+                _search_event_types=None,
+                _search_event_types_match_all=False,
+                _search_camera_ids=None,
+                _search_from_time=None,
+                _search_to_time=None,
+                _search_time_preset="today",
+            )
+
+        center = page(EventCenterBackend())
+        with patch("surveillance.ui.events.save_config"):
+            EventsView._load_search_from_config(center)
+            center._search_event_types = ["motion"]
+            EventsView._save_search_to_config(center)
+            legacy = page(LegacyEventBackend())
+            EventsView._load_search_from_config(legacy)
+        assert legacy._search_event_types == ["08", "25:hikvision"]
+        assert legacy._search_event_types_match_all is True
+        assert config.events_search_event_types == ["08", "25:hikvision", "motion"]
 
 
 class TestFilterPopoverOptions:
