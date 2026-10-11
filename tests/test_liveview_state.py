@@ -248,6 +248,26 @@ class TestTimelinePause:
         assert page.timeline.canvas.called("ensure_visible") == [(1_700_000_000.0,)]
 
 
+class TestSeekGatesTheOldPosition:
+    """A timeline seek tells every History bridge where it jumped before
+    any slot's own seek runs, so the frames a slot still waiting its turn
+    plays from the old position cannot pull the marker back there."""
+
+    def test_every_history_bridge_expects_the_target(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(liveview, "run_async", lambda *args, **kwargs: None)
+        armed: list[int] = []
+        history = SimpleNamespace(
+            is_history=True, resume=lambda: None, expect_history_position=armed.append
+        )
+        live = SimpleNamespace(is_history=False, resume=lambda: None)
+        page = _page(False, [_slot(bridge=history), _slot(bridge=live)], active=[0, 1])
+        page._seek_generation = 0
+        page._seek_slot_to_time = lambda *args: None
+        page._run_staggered = lambda actions: None  # every slot still waiting its turn
+        LiveView._on_timeline_seek(page, 1_700_000_000.5)  # type: ignore[arg-type]
+        assert armed == [1_700_000_000]
+
+
 class TestStreamStartedUnderPause:
     """A stream that starts while the layout is paused joins the Pause:
     its bridge or monitor is paused along with the player, so neither
