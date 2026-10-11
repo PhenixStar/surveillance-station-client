@@ -1147,6 +1147,25 @@ class TestEventNavSearch:
         assert page.seeks == []
         assert page.busy == [False, None]
 
+    def test_next_searches_what_happened_after_the_timeline_fetch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A fetch made while following "now" is padded past it; the
+        # events cached from it end at the time it was requested.
+        page = self._page(monkeypatch, {})
+        page._timeline_data_generation = 1
+        page._presence_cache = {}
+        page._apply_timeline_data_to_canvas = lambda *_args: None
+        page._settle_timeline_fetch = lambda: None
+        LiveView._on_timeline_data_fetched(
+            page, 1, [1], 980_000.0, 1_010_000.0, 990_000.0, ({}, []), 1, [1]
+        )
+        page._focus_reference_time = lambda: 985_000.0
+        page.responses[(990_000, 1_000_000)] = [_nav_event(995_000)]
+        LiveView._seek_to_nearest_event(page, forward=True)
+        assert page.requested == [(990_000, 1_000_000)]
+        assert page.seeks == [995_000]
+
 
 class TestEventSearchBusyBeforeTheTimeline:
     """_forget_pending_lookups runs while Live View is still being built,

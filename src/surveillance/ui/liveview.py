@@ -837,7 +837,9 @@ class LiveView(Gtk.Box):
         self._presence_cache: dict[int, tuple[float, float, list[tuple[int, int]]]] = {}
         # Event-marker cache, same shape/coverage rules as the presence
         # cache above -- populated together from the same EnumInterval
-        # fetch (see _on_timeline_data_fetched), never independently.
+        # fetch (see _on_timeline_data_fetched), never independently --
+        # except that its covered end stops at the time of the request:
+        # Previous/Next event trusts it, and a later event is not in it.
         self._event_cache: dict[int, tuple[float, float, list[Event]]] = {}
         self._presence_debounce_id = 0
         # Bumped per fetch batch so a slower-landing fetch superseded by
@@ -1343,6 +1345,7 @@ class LiveView(Gtk.Box):
         self._timeline_data_generation += 1
         generation = self._timeline_data_generation
         self._timeline_fetch_in_flight = True
+        requested_at = time.time()
         run_async(
             self.app.event_backend.list_presence_and_events(
                 self.app.api, needed, camera_names, int(fetch_start), int(fetch_end)
@@ -1352,6 +1355,7 @@ class LiveView(Gtk.Box):
                 needed,
                 fetch_start,
                 fetch_end,
+                requested_at,
                 result,
                 focus_camera_id,
                 active_camera_ids,
@@ -1384,6 +1388,7 @@ class LiveView(Gtk.Box):
         requested_ids: list[int],
         fetch_start: float,
         fetch_end: float,
+        requested_at: float,
         result: tuple[dict[int, list[tuple[int, int]]], list[Event]],
         focus_camera_id: int | None,
         active_camera_ids: list[int],
@@ -1398,7 +1403,11 @@ class LiveView(Gtk.Box):
                 events_by_camera.setdefault(ev.camera_id, []).append(ev)
             for cid in requested_ids:
                 self._presence_cache[cid] = (fetch_start, fetch_end, presence.get(cid, []))
-                self._event_cache[cid] = (fetch_start, fetch_end, events_by_camera.get(cid, []))
+                self._event_cache[cid] = (
+                    fetch_start,
+                    min(fetch_end, requested_at),
+                    events_by_camera.get(cid, []),
+                )
             self._apply_timeline_data_to_canvas(focus_camera_id, active_camera_ids)
         self._settle_timeline_fetch()
 
