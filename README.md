@@ -632,7 +632,7 @@ surveillance-station-client/
 │   │   ├── login.py                     login dialog
 │   │   ├── headerbar.py                 header bar controls
 │   │   ├── sidebar.py                   camera list sidebar
-│   │   ├── camera_settings.py           per-camera settings dialog (protocol, direct URL)
+│   │   ├── camera_settings.py           per-camera settings dialog (protocol, direct URL, stream profile)
 │   │   ├── liveview.py                  live stream grid
 │   │   ├── layouts.py                   grid layout definitions
 │   │   ├── timeline.py                  Live View timeline strip
