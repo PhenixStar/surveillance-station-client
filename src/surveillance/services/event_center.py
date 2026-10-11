@@ -234,13 +234,17 @@ async def _list_event_center(
             },
         )
         page = data.get(_LOCAL_DS_ID, [])
-        # Done only on an empty page: List's own cap on limit is unknown,
-        # and stopping at a short page would lose the rest under a lower
-        # one.
+        # Done on an empty page, not a short one: List's own cap on limit
+        # is unknown, and stopping at a short page would lose the rest
+        # under a lower one. A page ending where the last one did only
+        # repeats it, and would repeat forever.
         if not page:
             return entries
+        last = {"start_time": page[-1]["start_time"], "id": page[-1]["id"]}
+        if last == offset:
+            return entries
         entries.extend(page)
-        offset = {"start_time": page[-1]["start_time"], "id": page[-1]["id"]}
+        offset = last
 
 
 def _resolve_camera_events(

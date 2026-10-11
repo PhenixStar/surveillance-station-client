@@ -1737,6 +1737,27 @@ class TestEventCenterBackend:
         ]
 
     @pytest.mark.asyncio
+    async def test_a_page_repeating_the_last_one_ends_the_paging(
+        self, api: SurveillanceAPI
+    ) -> None:
+        from surveillance.services.event_center import _list_event_center
+
+        t0 = 1700000000
+        page = [self._entry(2, t0 + 10), self._entry(1, t0)]
+        calls = 0
+
+        async def request(**_kwargs: Any) -> dict[str, Any]:
+            nonlocal calls
+            calls += 1
+            assert calls < 5, "still paging"
+            return {"0": page}  # the start_time_offset ignored
+
+        with patch.object(api, "request", side_effect=request):
+            entries = await _list_event_center(api, [1], t0 - 100, t0 + 100)
+        assert entries == page
+        assert calls == 2
+
+    @pytest.mark.asyncio
     async def test_no_cameras_makes_no_request(self, api: SurveillanceAPI) -> None:
         from surveillance.services.event_center import EventCenterBackend
 
