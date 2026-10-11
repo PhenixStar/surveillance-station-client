@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import math
 import os
 import tomllib
 from dataclasses import dataclass, field
@@ -426,7 +427,10 @@ def _config_from_data(data: dict[str, Any]) -> AppConfig:
     setting_overrides: dict[str, float] = {}
     for key, value in data.get("setting_overrides", {}).items():
         with contextlib.suppress(ValueError, TypeError):
-            setting_overrides[str(key)] = float(value)
+            number = float(value)
+            # TOML has nan and inf; no setting takes either.
+            if math.isfinite(number):
+                setting_overrides[str(key)] = number
 
     # setting_overrides_bool: maps BoolSetting.key (str) -> overridden value
     setting_overrides_bool: dict[str, bool] = {}

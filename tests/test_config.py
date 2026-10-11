@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 from surveillance.config import (
@@ -302,6 +303,18 @@ class TestSettingOverrides:
             {"setting_overrides": {"cache_seconds_default": "not-a-number", "other_key": 1.5}}
         )
         assert cfg.setting_overrides == {"other_key": 1.5}
+
+    def test_nan_and_inf_are_dropped(self) -> None:
+        # A whole-MiB byte cap is rounded, which raises on either.
+        cfg = _config_from_data(
+            tomllib.loads(
+                "[setting_overrides]\n"
+                "demuxer_max_bytes_mib = nan\n"
+                "demuxer_max_back_bytes_mib = inf\n"
+                "cache_seconds_default = 3.0\n"
+            )
+        )
+        assert cfg.setting_overrides == {"cache_seconds_default": 3.0}
 
     def test_round_trips_through_save_and_load(self, tmp_path: Path, monkeypatch: object) -> None:
         import surveillance.config as cfg
