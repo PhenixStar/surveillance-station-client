@@ -543,10 +543,12 @@ class TestEventService:
         self, api: SurveillanceAPI
     ) -> None:
         """list_presence_and_events must decode the exact same presence
-        and events a caller would get from list_recording_presence and
-        list_events separately -- it exists only to avoid a
+        a caller would get from list_recording_presence, and the same
+        events as decoding event_map does -- it exists only to avoid a
         second round trip for the same EnumInterval data, not to change
-        what either half returns."""
+        what either half returns. list_events is built on it, so the
+        events are checked against their known values instead."""
+        from surveillance.services.event import list_recording_presence
         from surveillance.services.legacy_event import LegacyEventBackend
 
         from_time = 1700000000
@@ -571,12 +573,12 @@ class TestEventService:
             presence, events = await LegacyEventBackend().list_presence_and_events(
                 api, [1], {1: "Front Door"}, from_time, from_time + 100
             )
-            expected_events = await LegacyEventBackend().list_events(
-                api, [1], {1: "Front Door"}, from_time, from_time + 100
-            )
+            expected_presence = await list_recording_presence(api, [1], from_time, from_time + 100)
 
-        assert presence == {1: [(from_time, from_time + 100)]}
-        assert events == expected_events
+        assert presence == expected_presence == {1: [(from_time, from_time + 100)]}
+        assert [
+            (e.id, e.start_time, e.stop_time, e.legacy_flag, e.seek_offset) for e in events
+        ] == [(555, from_time + 10, from_time + 25, 513, 10)]
 
     @pytest.mark.asyncio
     async def test_legacy_list_presence_and_events_no_cameras(self, api: SurveillanceAPI) -> None:
