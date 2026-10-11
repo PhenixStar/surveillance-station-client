@@ -1168,12 +1168,16 @@ class LiveView(Gtk.Box):
         """
         # Only the timeline's own Pause stops the marker: with every slot
         # frozen, the fallback would otherwise estimate it onwards. Not
-        # the focus slot losing its stream (or never having a bridge, on
-        # a non-WebSocket protocol): the other slots still play, and the
-        # marker follows them.
+        # the focus slot losing its History stream: the other slots still
+        # play, and the marker follows them.
         if self._timeline_paused:
             return
         focus_slot = self._slots[self._timeline_focus_slot]
+        # A focus slot playing live on RTSP or a direct URL has no bridge
+        # and no History position. Given one, it would come back in
+        # recorded video once its stream gave up (see sync_camera_statuses).
+        if focus_slot._ws_bridge is None and focus_slot._history_position is None:
+            return
 
         ticks: list[int | None] = []
         for i in self._active:

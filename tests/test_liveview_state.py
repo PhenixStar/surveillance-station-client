@@ -1247,3 +1247,13 @@ class TestMarkerWithoutAFocusStream:
         page = self._page(paused=True)
         LiveView._advance_focus_history_position(page)
         assert page.marker == []
+
+    def test_a_live_focus_slot_without_a_bridge_gets_no_position(self) -> None:
+        # On RTSP and left live, e.g. no recording where the others went.
+        page = self._page(paused=False)
+        focus = page._slots[0]
+        focus._history_position = None
+        page._history_gap_last_set_position = None
+        LiveView._advance_focus_history_position(page)
+        assert focus._history_position is None
+        assert page.marker == []
