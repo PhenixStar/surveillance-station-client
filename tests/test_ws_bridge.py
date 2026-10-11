@@ -3453,6 +3453,17 @@ class TestTickGateAfterAJump:
         assert slow.consume_last_real_tick() is None
         assert fast.consume_last_real_tick() == 720
 
+    def test_a_short_jump_back_at_speed_still_ignores_the_old_position(self) -> None:
+        # At 4x the tolerance spans more than the 10 s jumped back.
+        bridge = self._bridge("4")
+        bridge._record_real_tick(1000)
+        bridge.expect_history_position(990)
+        bridge._record_real_tick(1001)
+        bridge._record_real_tick(1006)
+        assert bridge.consume_last_real_tick() is None
+        bridge._record_real_tick(991)
+        assert bridge.consume_last_real_tick() == 991
+
     def test_it_gives_up_after_a_while(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from surveillance.services import ws_bridge
 

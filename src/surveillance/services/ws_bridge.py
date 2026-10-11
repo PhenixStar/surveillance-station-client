@@ -494,10 +494,13 @@ class WebSocketBridge:
         # is what compute_focus_marker_update already expects, taking the
         # min across slots in reverse and the max going forward.
         self._last_real_tick: int | None = None
-        # (position, monotonic time) a jump was just made to, while
-        # frames from before it may still be arriving -- see
-        # expect_history_position. None once a frame near it has come.
-        self._tick_gate: tuple[int, float] | None = None
+        # (position, where frames were when it was armed, monotonic time)
+        # a jump was just made to, while frames from before it may still
+        # be arriving -- see expect_history_position. None once a frame
+        # near it has come.
+        self._tick_gate: tuple[int, int | None, float] | None = None
+        # The last History frame's position, gate or not.
+        self._last_frame_tick: int | None = None
         # The currently connected socket, for seek() to send on from
         # outside _pump's own scope -- None whenever no connection is up
         # (including between reconnect attempts), so seek() knows to fold
@@ -1630,13 +1633,15 @@ class WebSocketBridge:
         a seek that lands somewhere unexpected can't silence this bridge.
         """
         self._last_real_tick = None
-        self._tick_gate = (position, time.monotonic())
+        self._tick_gate = (position, self._last_frame_tick, time.monotonic())
 
     def _record_real_tick(self, tick: int) -> None:
         """Fold a History video frame at *tick* into what
         consume_last_real_tick reports: the furthest along the direction
         of travel, unless it's from before a jump just made."""
-        if not self._passes_tick_gate(tick):
+        passes = self._passes_tick_gate(tick)
+        self._last_frame_tick = tick
+        if not passes:
             return
         if self._last_real_tick is None:
             self._last_real_tick = tick
@@ -1654,13 +1659,16 @@ class WebSocketBridge:
         """Whether a frame at *tick* counts -- see expect_history_position."""
         if self._tick_gate is None:
             return True
-        position, armed_at = self._tick_gate
+        position, origin, armed_at = self._tick_gate
         # A frame of the new position can be up to a couple of seconds of
-        # playback past it, more at a higher speed.
+        # playback past it, more at a higher speed. One closer to where
+        # frames were before the jump is from there: at 4x the tolerance
+        # already spans a 10 s jump.
         tolerance = _TICK_GATE_TOLERANCE_SECONDS * max(1.0, float(self._speed))
-        if abs(tick - position) <= tolerance or (
-            time.monotonic() - armed_at > _TICK_GATE_TIMEOUT_SECONDS
-        ):
+        near = abs(tick - position) <= tolerance
+        if near and origin is not None:
+            near = abs(tick - position) <= abs(tick - origin)
+        if near or time.monotonic() - armed_at > _TICK_GATE_TIMEOUT_SECONDS:
             self._tick_gate = None
             return True
         return False
