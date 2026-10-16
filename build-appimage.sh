@@ -148,9 +148,10 @@ hiddenimports = [
     'gi.repository.Gsk',
     'mpv', 'OpenGL', 'OpenGL.GL',
     # PyInstaller's PyOpenGL hook only adds OpenGL.platform.glx on Linux,
-    # but PyOpenGL picks its EGL platform whenever WAYLAND_DISPLAY is set
-    # -- without this, every OpenGL.GL import fails on Wayland and each
-    # Live View or playback slot stays black while mpv decodes behind it.
+    # but PyOpenGL picks its EGL platform when XDG_SESSION_TYPE is wayland
+    # or WAYLAND_DISPLAY is set. Without it, every OpenGL.GL import fails
+    # on Wayland and each Live View or playback slot stays black while
+    # mpv decodes behind it.
     'OpenGL.platform.egl',
     'httpx', 'httpx._transports.default', 'httpx._content',
     'h2', 'hpack', 'hyperframe',
