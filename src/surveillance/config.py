@@ -141,6 +141,9 @@ class AppConfig:
     poll_interval_cameras: int = 30
     poll_interval_alerts: int = 30
     poll_interval_homemode: int = 60
+    # How often to poll Surveillance Station Transactions (POS receipts)
+    # for the Live View overlay; its look is on the Settings page.
+    poll_interval_transactions: int = 5
     snapshot_dir: str = ""
     camera_overrides: dict[int, str] = field(default_factory=dict)
     camera_protocols: dict[int, str] = field(default_factory=dict)
@@ -460,6 +463,7 @@ def _config_from_data(data: dict[str, Any]) -> AppConfig:
         poll_interval_cameras=_poll_interval(general, "poll_interval_cameras", 30),
         poll_interval_alerts=_poll_interval(general, "poll_interval_alerts", 30),
         poll_interval_homemode=_poll_interval(general, "poll_interval_homemode", 60),
+        poll_interval_transactions=_poll_interval(general, "poll_interval_transactions", 5),
         snapshot_dir=general.get("snapshot_dir", str(DATA_DIR / "snapshots")),
         search_from_time=_time_text(session.get("search_from_time")),
         search_to_time=_time_text(session.get("search_to_time")),
@@ -526,6 +530,7 @@ def _write_config(config: AppConfig) -> None:
             "poll_interval_cameras": config.poll_interval_cameras,
             "poll_interval_alerts": config.poll_interval_alerts,
             "poll_interval_homemode": config.poll_interval_homemode,
+            "poll_interval_transactions": config.poll_interval_transactions,
             "theme": config.theme,
             "sidebar_visible": config.sidebar_visible,
             "timeline_visible": config.timeline_visible,
