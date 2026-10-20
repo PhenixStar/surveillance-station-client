@@ -457,11 +457,17 @@ class MainWindow(Gtk.ApplicationWindow):
                 self._seen_transactions = {tx.id: tx.text for tx in transactions}
 
         def _transactions_error(e: Exception) -> None:
+            from surveillance.api.auth import SessionExpiredError
             from surveillance.api.client import ApiError
 
-            # 102-104: no such API/method/version; 105: the account lacks
-            # the Transactions privilege; 410: the Transactions add-on is off.
-            if isinstance(e, ApiError) and e.code in (102, 103, 104, 105, 410):
+            # 102-104: no such API/method/version; 105 even after the fresh
+            # login request() makes for it: the account lacks the
+            # Transactions privilege; 410: the Transactions add-on is off.
+            # A failed re-login must not retry a login every poll; the
+            # next connect starts polling again.
+            if isinstance(e, SessionExpiredError) or (
+                isinstance(e, ApiError) and e.code in (102, 103, 104, 105, 410)
+            ):
                 log.info("POS transactions overlay off: %s", e)
                 self._transactions_available = False
             else:

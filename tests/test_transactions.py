@@ -183,28 +183,71 @@ def test_only_slots_on_screen_count() -> None:
     assert shown == [0]
 
 
-def test_requests_never_log_in_again() -> None:
-    """105 is Surveillance Station's answer to an account without the
-    Transactions privilege; request() would take it for an expired
-    session and log in again, so neither call may go through it."""
+def _answer_105(times: int) -> tuple[list[str], object]:
+    """A NAS whose Transactions calls answer 105 *times* times, then
+    succeed; logins are recorded."""
+    import httpx
+
+    logins: list[str] = []
+    refused = [times]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+        if request.method == "POST":
+            params.update(dict(httpx.QueryParams(request.content.decode())))
+        if params.get("api") == "SYNO.API.Auth":
+            logins.append(params.get("method", ""))
+            return httpx.Response(200, json={"success": True, "data": {"sid": "new"}})
+        if refused[0]:
+            refused[0] -= 1
+            return httpx.Response(200, json={"success": False, "error": {"code": 105}})
+        return httpx.Response(200, json={"success": True, "data": {"data": [], "timestamp": "7"}})
+
+    return logins, handler
+
+
+def _api() -> object:
+    from surveillance.api.client import SurveillanceAPI
+    from surveillance.config import ConnectionProfile
+
+    api = SurveillanceAPI(ConnectionProfile(name="t", host="nas", port=5001, https=True))
+    api.sid, api.username, api.password = "old", "user", "pw"
+    return api
+
+
+def test_a_session_expired_as_105_is_recovered() -> None:
+    """Synology's own Surveillance client re-authenticates on 105
+    (SVSNetworkUtils adds it to the session-expired codes), so an
+    expired session can come back as 105: a fresh login must fix it
+    rather than switch the overlay off."""
     import asyncio
 
-    from surveillance.services.transactions import (
-        get_paired_devices,
-        get_recent_transactions,
-    )
+    import respx
 
-    calls: list[str] = []
+    from surveillance.services.transactions import get_recent_transactions
 
-    class _API:
-        async def request(self, **kwargs: object) -> object:
-            raise AssertionError("request() logs in again on 105")
+    logins, handler = _answer_105(1)
+    api = _api()
+    with respx.mock(assert_all_called=False) as mock:
+        mock.route(host="nas").mock(side_effect=handler)
+        assert asyncio.run(get_recent_transactions(api)) == (7, [])  # type: ignore[arg-type]
+    assert logins == ["Login"]
 
-        async def raw_request(self, api: str, method: str, **kwargs: object) -> object:
-            calls.append(api.rsplit(".", 1)[1])
-            return {"data": [], "timestamp": "7"}
 
-    api = _API()
-    assert asyncio.run(get_paired_devices(api)) == {}  # type: ignore[arg-type]
-    assert asyncio.run(get_recent_transactions(api)) == (7, [])  # type: ignore[arg-type]
-    assert calls == ["Device", "Transaction"]
+def test_no_transactions_privilege_still_ends_in_105() -> None:
+    import asyncio
+
+    import pytest
+    import respx
+
+    from surveillance.api.client import ApiError
+    from surveillance.services.transactions import get_paired_devices
+
+    logins, handler = _answer_105(2)
+    api = _api()
+    with respx.mock(assert_all_called=False) as mock:
+        mock.route(host="nas").mock(side_effect=handler)
+        with pytest.raises(ApiError) as exc:
+            asyncio.run(get_paired_devices(api))  # type: ignore[arg-type]
+    assert exc.value.code == 105
+    assert logins == ["Login"]
