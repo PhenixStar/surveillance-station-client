@@ -69,6 +69,12 @@ in the slot's right-click menu, without disturbing the other slots; a
 slot showing recorded video reloads at the same moment rather than
 returning to live. The reload button in the header bar does the same for
 every slot in the layout, one after another rather than all at once.
+Receipts from Surveillance Station Transactions appear over the camera
+each POS device is paired with: every new receipt is drawn at the
+top-left of every live slot showing that camera and disappears after a
+set time. Nothing is requested while no paired camera is on screen, and
+the overlay switches itself off when the NAS has no Transactions add-on
+or the account lacks the Transactions privilege.
 .TP
 .B Live View Timeline
 A shared timeline strip below the grid, toggled from the header bar
@@ -228,11 +234,13 @@ automatically at high History playback speeds, the shared demuxer byte
 cap, the cap on each player's back buffer, and the
 speed-times-active-slots budget the Live View timeline's
 History speed dropdown enforces, plus an on-screen readout of cache
-depth/target/effective speed for diagnosing buffering. Each setting has
-its own reset-to-default button, plus one that resets everything on the
-page at once. Changes apply to the next stream that starts (the
-on-screen readout takes effect immediately, and the speed budget the next
-time the speed dropdown opens) and persist across restarts.
+depth/target/effective speed for diagnosing buffering, and the POS
+receipt overlay (on or off, text size, maximum lines, time on screen).
+Each setting has its own reset-to-default button, plus one that resets
+everything on the page at once. Changes apply to the next stream that
+starts (the on-screen readout takes effect immediately, the receipt
+overlay with the next receipt, and the speed budget the next time the
+speed dropdown opens) and persist across restarts.
 .TP
 .B About
 Shows the version, license, and repository links, and checks the GitHub
@@ -299,8 +307,10 @@ which records whether the Live View timeline strip is shown, and
 .IR dismissed_update_version ,
 the release tag whose update notice has been dismissed.
 .PP
-.IR poll_interval_cameras ", " poll_interval_alerts " and " poll_interval_homemode
-are in seconds and default to 30, 30 and 60. The minimum is 5: a smaller or
+.IR poll_interval_cameras ", " poll_interval_alerts ", " poll_interval_homemode
+and
+.I poll_interval_transactions
+are in seconds and default to 30, 30, 60 and 5. The minimum is 5: a smaller or
 non-numeric value is reported in the log and replaced, since 0 would poll the
 NAS continuously.
 .IR poll_interval_cameras
