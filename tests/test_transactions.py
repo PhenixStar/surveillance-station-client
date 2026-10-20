@@ -4,6 +4,7 @@ from surveillance.services.transactions import (
     Transaction,
     fresh_receipts,
     parse_devices,
+    parse_server_time,
     parse_transactions,
 )
 
@@ -129,3 +130,9 @@ def test_fresh_receipts_redraws_a_receipt_whose_text_grew() -> None:
     grown = Transaction(id="1_1", pos_id=1, begin=900, end=0, text="#1 Lyn\n2x BEER")
     assert fresh_receipts([grown], seen, 1000.0) == [grown]
     assert seen == {"1_1": "#1 Lyn\n2x BEER"}
+
+
+def test_parse_server_time() -> None:
+    assert parse_server_time({"data": [], "timestamp": "1505355467"}) == 1505355467
+    assert parse_server_time({"data": []}) == 0
+    assert parse_server_time([]) == 0

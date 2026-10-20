@@ -103,6 +103,14 @@ def parse_transactions(data: Any) -> list[Transaction]:
     return sorted(result, key=lambda t: (t.begin, t.id))
 
 
+def parse_server_time(data: Any) -> int:
+    """The NAS clock when it answered (Unix time), 0 if not given."""
+    try:
+        return int(data["timestamp"])
+    except (KeyError, TypeError, ValueError):
+        return 0
+
+
 def fresh_receipts(
     transactions: list[Transaction], seen: dict[str, str], cutoff: float
 ) -> list[Transaction]:
@@ -131,8 +139,10 @@ async def get_paired_devices(api: SurveillanceAPI) -> dict[int, int]:
     return parse_devices(data)
 
 
-async def get_recent_transactions(api: SurveillanceAPI, limit: int = 5) -> list[Transaction]:
-    """The newest *limit* transactions, oldest first.
+async def get_recent_transactions(
+    api: SurveillanceAPI, limit: int = 5
+) -> tuple[int, list[Transaction]]:
+    """The NAS clock and the newest *limit* transactions, oldest first.
 
     Kept small on purpose: every row embeds a ~14 KB base64 snapshot.
     """
@@ -142,4 +152,4 @@ async def get_recent_transactions(api: SurveillanceAPI, limit: int = 5) -> list[
         version=2,
         extra_params={"start": 0, "limit": limit},
     )
-    return parse_transactions(data)
+    return parse_server_time(data), parse_transactions(data)

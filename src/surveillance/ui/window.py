@@ -415,7 +415,7 @@ class MainWindow(Gtk.ApplicationWindow):
             live = self.stack.get_child_by_name("live")
             return live if isinstance(live, LiveView) else None
 
-        async def _fetch() -> tuple[dict[int, int] | None, list[Transaction]]:
+        async def _fetch() -> tuple[dict[int, int] | None, tuple[int, list[Transaction]]]:
             from surveillance.services.transactions import (
                 get_paired_devices,
                 get_recent_transactions,
@@ -423,15 +423,15 @@ class MainWindow(Gtk.ApplicationWindow):
 
             api = self.app.api
             if api is None:
-                return None, []
+                return None, (0, [])
             cameras = None
             # The pairing rarely changes; re-read it every few minutes.
             if not self._pos_cameras or time.monotonic() - self._pos_cameras_at > 300:
                 cameras = await get_paired_devices(api)
             return cameras, await get_recent_transactions(api)
 
-        def _apply(result: tuple[dict[int, int] | None, list[Transaction]]) -> None:
-            cameras, transactions = result
+        def _apply(result: tuple[dict[int, int] | None, tuple[int, list[Transaction]]]) -> None:
+            cameras, (now, transactions) = result
             if cameras is not None:
                 self._pos_cameras = cameras
                 self._pos_cameras_at = time.monotonic()
@@ -439,7 +439,9 @@ class MainWindow(Gtk.ApplicationWindow):
             from surveillance.ui import liveview
 
             live = _live_view()
-            cutoff = time.time() - liveview._RECEIPT_SECONDS
+            # The NAS's own clock, as receipt times are in it: a client
+            # running a minute fast would otherwise see every one as stale.
+            cutoff = (now or time.time()) - liveview._RECEIPT_SECONDS
             for tx in fresh_receipts(transactions, self._seen_transactions, cutoff):
                 camera_id = self._pos_cameras.get(tx.pos_id)
                 if live is not None and camera_id:
