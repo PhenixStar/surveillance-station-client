@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING
 
 import gi
@@ -43,6 +44,8 @@ from surveillance.ui.sidebar import CameraSidebar
 
 if TYPE_CHECKING:
     from surveillance.app import SurveillanceApp
+    from surveillance.services.transactions import Transaction
+    from surveillance.ui.liveview import LiveView
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +111,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         self._homemode_poll_id: int = 0
         self._alerts_poll_id: int = 0
+        self._transactions_poll_id: int = 0
 
         # Window-wide mouse activity, used to keep the Live View timeline's
         # focus-slot frame lit (see LiveView.register_timeline_activity).
@@ -393,6 +397,103 @@ class MainWindow(Gtk.ApplicationWindow):
         )
         _poll_alerts()
 
+        self._start_transactions_polling()
+
+    def _start_transactions_polling(self) -> None:
+        """Show new POS receipts (Surveillance Station Transactions) over
+        the Live View slots showing each POS device's paired camera."""
+        from surveillance.util.async_bridge import run_async
+
+        self._transactions_available = True
+        self._pos_cameras: dict[int, int] = {}  # POS device id -> camera id
+        self._pos_cameras_at = 0.0
+        self._seen_transactions: set[str] = set()
+
+        def _live_view() -> LiveView | None:
+            from surveillance.ui.liveview import LiveView
+
+            live = self.stack.get_child_by_name("live")
+            return live if isinstance(live, LiveView) else None
+
+        async def _fetch() -> tuple[dict[int, int] | None, list[Transaction]]:
+            from surveillance.services.transactions import (
+                get_paired_devices,
+                get_recent_transactions,
+            )
+
+            api = self.app.api
+            if api is None:
+                return None, []
+            cameras = None
+            # The pairing rarely changes; re-read it every few minutes.
+            if not self._pos_cameras or time.monotonic() - self._pos_cameras_at > 300:
+                cameras = await get_paired_devices(api)
+            return cameras, await get_recent_transactions(api)
+
+        def _apply(result: tuple[dict[int, int] | None, list[Transaction]]) -> None:
+            cameras, transactions = result
+            if cameras is not None:
+                self._pos_cameras = cameras
+                self._pos_cameras_at = time.monotonic()
+            from surveillance.ui import liveview
+
+            live = _live_view()
+            # Only receipts still inside the display window: startup and a
+            # camera newly brought on screen don't replay old sales.
+            cutoff = time.time() - liveview._RECEIPT_SECONDS
+            for tx in transactions:
+                if tx.id in self._seen_transactions:
+                    continue
+                self._seen_transactions.add(tx.id)
+                camera_id = self._pos_cameras.get(tx.pos_id)
+                if live is not None and camera_id and tx.begin >= cutoff:
+                    live.show_transaction(camera_id, tx.text)
+            if len(self._seen_transactions) > 500:
+                self._seen_transactions = {tx.id for tx in transactions}
+
+        def _transactions_error(e: Exception) -> None:
+            from surveillance.api.auth import SessionExpiredError
+            from surveillance.api.client import ApiError
+
+            # 102-104: no such API/method/version; 105: the account lacks
+            # the Transactions privilege; 410: the Transactions add-on is off.
+            # A failed re-login (105 is also a session code) must not retry
+            # a login every poll; the next connect starts polling again.
+            if isinstance(e, SessionExpiredError) or (
+                isinstance(e, ApiError) and e.code in (102, 103, 104, 105, 410)
+            ):
+                log.info("POS transactions overlay off: %s", e)
+                self._transactions_available = False
+            else:
+                log.debug("Transactions poll failed: %s", e)
+
+        def _poll_transactions() -> bool:
+            if not self._transactions_available:
+                self._transactions_poll_id = 0
+                return False
+            from surveillance.ui import liveview
+
+            # Switched off on the Settings page: keep the timer, skip the
+            # request, so switching it back on needs no restart.
+            if not self.app.api or not liveview._RECEIPT_ENABLED:
+                return True
+            live = _live_view()
+            if live is None:
+                return True
+            # Nothing to draw on: skip the request (each row carries a
+            # snapshot) until a paired camera is on screen.
+            if self._pos_cameras and not (
+                live.displayed_camera_ids() & set(self._pos_cameras.values())
+            ):
+                return True
+            run_async(_fetch(), callback=_apply, error_callback=_transactions_error)
+            return True
+
+        self._transactions_poll_id = GLib.timeout_add_seconds(
+            self.app.config.poll_interval_transactions, _poll_transactions
+        )
+        _poll_transactions()
+
     def _stop_polling(self) -> None:
         """Stop background polling for alerts and home mode."""
         if self._homemode_poll_id:
@@ -401,6 +502,9 @@ class MainWindow(Gtk.ApplicationWindow):
         if self._alerts_poll_id:
             GLib.source_remove(self._alerts_poll_id)
             self._alerts_poll_id = 0
+        if self._transactions_poll_id:
+            GLib.source_remove(self._transactions_poll_id)
+            self._transactions_poll_id = 0
 
     def on_disconnected(self) -> None:
         """Clean up when disconnected (logout/quit)."""

@@ -227,3 +227,16 @@
     font-weight: bold;
     text-shadow: 0 0 3px #000, 0 0 3px #000;
 }
+
+/* POS receipt (Surveillance Station Transactions) over a Live View slot —
+   same translucent black as the header and toolbar, monospace so item
+   columns line up. */
+.slot-receipt {
+    margin: 4px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #f0f0f0;
+    font-family: monospace;
+    font-size: 0.8em;
+}

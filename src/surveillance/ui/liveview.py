@@ -44,7 +44,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 
-from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # type: ignore[import-untyped]
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango  # type: ignore[import-untyped]
 
 from surveillance.api.models import Camera, CameraStatus, Event, PtzPatrol, PtzPreset, Recording
 from surveillance.config import EventTypeHistory, save_config, save_config_now
@@ -353,6 +353,49 @@ def compute_focus_marker_update(
     return gap_reference_position + elapsed * speed_signed, gap_started_at, gap_reference_position
 
 
+# POS receipt overlay (Surveillance Station Transactions), tuned from the
+# Settings page (settings_registry). Read fresh on every receipt, so a
+# change applies to the next one without a restart.
+_RECEIPT_ENABLED = True
+_RECEIPT_SCALE_PERCENT = 100.0
+_RECEIPT_MAX_LINES = 14
+_RECEIPT_SECONDS = 60
+
+
+def set_receipt_enabled(value: bool) -> None:
+    global _RECEIPT_ENABLED
+    _RECEIPT_ENABLED = value
+
+
+def set_receipt_scale_percent(value: float) -> None:
+    global _RECEIPT_SCALE_PERCENT
+    _RECEIPT_SCALE_PERCENT = min(400.0, max(25.0, float(value)))
+
+
+def set_receipt_max_lines(value: float) -> None:
+    global _RECEIPT_MAX_LINES
+    _RECEIPT_MAX_LINES = max(1, int(value))
+
+
+def set_receipt_seconds(value: float) -> None:
+    global _RECEIPT_SECONDS
+    _RECEIPT_SECONDS = max(1, int(value))
+
+
+def receipt_lines(text: str, max_lines: int) -> str:
+    """Cap a receipt at *max_lines*, keeping the header and the last
+    lines (total, payment, void) and eliding the items in between."""
+    lines = text.splitlines()
+    if len(lines) <= max_lines:
+        return text
+    if max_lines <= 2:
+        return "\n".join(lines[:max_lines])
+    tail = (max_lines - 1) // 2
+    head = max_lines - 1 - tail
+    hidden = len(lines) - head - tail
+    return "\n".join([*lines[:head], f"… {hidden} more lines", *lines[len(lines) - tail :]])
+
+
 class CameraSlot(Gtk.Box):
     """Self-contained camera slot with a header label, video player, and
     hover-revealed toolbar (see slot_toolbar.SlotToolbar)."""
@@ -387,6 +430,19 @@ class CameraSlot(Gtk.Box):
         self._toolbar = SlotToolbar(index, self.player)
         self._toolbar.set_snapshot_trigger(self._take_snapshot)
         self._player_overlay.add_overlay(self._toolbar)
+
+        # POS receipt (Surveillance Station Transactions) over the top-left
+        # of the video — the hover toolbar owns the bottom edge. Not a
+        # pointer target, so hover, zoom/pan and the context menu still
+        # reach the player underneath.
+        self._receipt = Gtk.Label(xalign=0)
+        self._receipt.add_css_class("slot-receipt")
+        self._receipt.set_halign(Gtk.Align.START)
+        self._receipt.set_valign(Gtk.Align.START)
+        self._receipt.set_can_target(False)
+        self._receipt.set_visible(False)
+        self._player_overlay.add_overlay(self._receipt)
+        self._receipt_hide_id = 0
 
         # On the player, not the overlay: the toolbar is an overlay child,
         # so a pointer crossing between the two never leaves the overlay
@@ -519,6 +575,34 @@ class CameraSlot(Gtk.Box):
 
     def set_history_mode(self, is_history: bool) -> None:
         self._toolbar.set_history_mode(is_history)
+        if is_history:
+            # A live receipt over recorded video would be misleading.
+            self.hide_receipt()
+
+    def show_receipt(self, text: str) -> None:
+        """Show a POS receipt over the video, live only, sized and timed
+        by the Settings page values."""
+        if not _RECEIPT_ENABLED or self.camera is None or self._history_position is not None:
+            return
+        attrs = Pango.AttrList()
+        attrs.insert(Pango.attr_scale_new(_RECEIPT_SCALE_PERCENT / 100.0))
+        self._receipt.set_attributes(attrs)
+        self._receipt.set_text(receipt_lines(text, _RECEIPT_MAX_LINES))
+        self._receipt.set_visible(True)
+        if self._receipt_hide_id:
+            GLib.source_remove(self._receipt_hide_id)
+        self._receipt_hide_id = GLib.timeout_add_seconds(_RECEIPT_SECONDS, self._on_receipt_timeout)
+
+    def _on_receipt_timeout(self) -> bool:
+        self._receipt_hide_id = 0
+        self._receipt.set_visible(False)
+        return False
+
+    def hide_receipt(self) -> None:
+        if self._receipt_hide_id:
+            GLib.source_remove(self._receipt_hide_id)
+            self._receipt_hide_id = 0
+        self._receipt.set_visible(False)
 
     def set_mic_callback(self, callback: object) -> None:
         self._toolbar.set_mic_callback(callback)
@@ -655,6 +739,7 @@ class CameraSlot(Gtk.Box):
         # left running would go on talking through the previous camera
         # with nothing on screen to say so.
         self.stop_ptt()
+        self.hide_receipt()
         self.camera = camera
         self._status = ""
         self._selected = False
@@ -705,6 +790,7 @@ class CameraSlot(Gtk.Box):
     def clear(self) -> None:
         self.stop_stream()
         self.stop_ptt()
+        self.hide_receipt()
         self.player.reset_zoom()
         self._toolbar.clear()
         self.set_history_mode(False)
@@ -3411,6 +3497,16 @@ class LiveView(Gtk.Box):
         """Restore camera assignments from config."""
         self._cameras = cameras
         self._restore_layout_cameras()
+
+    def displayed_camera_ids(self) -> set[int]:
+        """Cameras currently assigned to any slot."""
+        return {slot.camera.id for slot in self._slots if slot.camera is not None}
+
+    def show_transaction(self, camera_id: int, text: str) -> None:
+        """Show a POS receipt over every slot showing *camera_id*."""
+        for slot in self._slots:
+            if slot.camera is not None and slot.camera.id == camera_id:
+                slot.show_receipt(text)
 
     def sync_camera_statuses(self, cameras: list[Camera]) -> None:
         """Swap a visible slot between its real stream and the offline

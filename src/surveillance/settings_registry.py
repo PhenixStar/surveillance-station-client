@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from surveillance.services import event_backend, live
-from surveillance.ui import mpv_widget, timeline
+from surveillance.ui import liveview, mpv_widget, timeline
 
 if TYPE_CHECKING:
     from surveillance.config import AppConfig
@@ -289,6 +289,75 @@ def _timeline_settings() -> list[Setting]:
     ]
 
 
+def _receipt_settings() -> list[Setting]:
+    return [
+        Setting(
+            key="receipt_scale_percent",
+            label="Receipt text size (%)",
+            tooltip=(
+                "Size of the POS receipt shown over a cashier camera, as a "
+                "percentage of the normal overlay text. Lower it for small "
+                "tiles in a 3x3 or 4x4 grid."
+            ),
+            default=liveview._RECEIPT_SCALE_PERCENT,
+            get=lambda: liveview._RECEIPT_SCALE_PERCENT,
+            set=liveview.set_receipt_scale_percent,
+            minimum=25.0,
+            maximum=400.0,
+            step=10.0,
+            digits=0,
+        ),
+        Setting(
+            key="receipt_max_lines",
+            label="Receipt maximum lines",
+            tooltip=(
+                "Longest receipt drawn in full. A longer one keeps its "
+                "first and last lines (header, total, payment) and folds "
+                "the items in between into one line."
+            ),
+            default=float(liveview._RECEIPT_MAX_LINES),
+            get=lambda: float(liveview._RECEIPT_MAX_LINES),
+            set=liveview.set_receipt_max_lines,
+            minimum=2.0,
+            maximum=40.0,
+            step=1.0,
+            digits=0,
+        ),
+        Setting(
+            key="receipt_seconds",
+            label="Receipt time on screen (seconds)",
+            tooltip=(
+                "How long a receipt stays over the video. Receipts older "
+                "than this when they reach the app are not shown."
+            ),
+            default=float(liveview._RECEIPT_SECONDS),
+            get=lambda: float(liveview._RECEIPT_SECONDS),
+            set=liveview.set_receipt_seconds,
+            minimum=5.0,
+            maximum=600.0,
+            step=5.0,
+            digits=0,
+        ),
+    ]
+
+
+def _receipt_bool_settings() -> list[BoolSetting]:
+    return [
+        BoolSetting(
+            key="receipt_enabled",
+            label="Show POS receipts over the paired camera",
+            tooltip=(
+                "Surveillance Station Transactions: each new receipt from a "
+                "POS device is drawn over every Live View slot showing the "
+                "camera paired with that device. Live view only."
+            ),
+            default=liveview._RECEIPT_ENABLED,
+            get=lambda: liveview._RECEIPT_ENABLED,
+            set=liveview.set_receipt_enabled,
+        ),
+    ]
+
+
 SECTIONS: list[SettingSection] = [
     SettingSection(title="Live View settings", choice_settings=_live_view_choice_settings()),
     SettingSection(
@@ -298,6 +367,11 @@ SECTIONS: list[SettingSection] = [
     ),
     SettingSection(title="Timeline settings", settings=_timeline_settings()),
     SettingSection(title="Event settings", bool_settings=_event_bool_settings()),
+    SettingSection(
+        title="POS receipt overlay",
+        settings=_receipt_settings(),
+        bool_settings=_receipt_bool_settings(),
+    ),
 ]
 
 
