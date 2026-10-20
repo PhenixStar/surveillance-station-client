@@ -71,16 +71,24 @@ class TestCamera:
         assert cam.has_speaker is True
 
     def test_from_api_fallback_name(self) -> None:
-        data = {"id": 2, "name": "Back Yard", "status": 0}
+        data = {"id": 2, "name": "Back Yard", "status": 7}
         cam = Camera.from_api(data)
         assert cam.name == "Back Yard"
         assert cam.status == CameraStatus.DISABLED
+
+    def test_status_numbers_follow_camera_list_v9(self) -> None:
+        """1 normal, 2 deleted, 3 disconnected, 7 disabled."""
+        statuses = [Camera.from_api({"status": n}).status for n in (1, 2, 3, 7)]
+        assert statuses[0] == CameraStatus.ENABLED
+        assert statuses[1] not in (CameraStatus.ENABLED, CameraStatus.DISCONNECTED)
+        assert statuses[2] == CameraStatus.DISCONNECTED
+        assert statuses[3] == CameraStatus.DISABLED
 
     def test_from_api_defaults(self) -> None:
         cam = Camera.from_api({})
         assert cam.id == 0
         assert cam.name == ""
-        assert cam.status == CameraStatus.DISABLED
+        assert cam.status != CameraStatus.ENABLED
         assert cam.is_ptz is False
         assert cam.has_audio is False
         assert cam.has_speaker is False

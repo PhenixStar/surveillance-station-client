@@ -32,9 +32,12 @@ from enum import IntEnum
 
 
 class CameraStatus(IntEnum):
-    DISABLED = 0
+    """Camera.List v9 status; the others (deleted, unavailable,
+    unauthorized...) land in _missing_ and count as not streaming."""
+
     ENABLED = 1
-    DISCONNECTED = 2
+    DISCONNECTED = 3
+    DISABLED = 7
 
     @classmethod
     def _missing_(cls, value: object) -> CameraStatus:
