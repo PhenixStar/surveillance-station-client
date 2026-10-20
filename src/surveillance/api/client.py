@@ -79,6 +79,10 @@ AUTH_ERRORS: dict[int, str] = {
     404: "Invalid OTP code",
     406: "Two-factor authentication enforced",
     407: "Account blocked after too many failed attempts",
+    408: "Password expired and cannot be changed",
+    409: "Password expired",
+    410: "Password must be changed",
+    411: "Account locked",
 }
 
 AUTH_API = "SYNO.API.Auth"

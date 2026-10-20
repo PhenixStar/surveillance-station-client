@@ -257,6 +257,13 @@ class TestErrorNamespaces:
         assert ApiError(407, table=auth).message.startswith("Account blocked")
         assert ApiError(407, table=svs).message == "CMS closed"
 
+    def test_password_and_lock_codes_are_named(self) -> None:
+        """408-411 per the DSM login and Surveillance Station guides."""
+        from surveillance.api.client import AUTH_ERRORS, ApiError
+
+        for code in (408, 409, 410, 411):
+            assert "Unknown" not in ApiError(code, table=AUTH_ERRORS).message
+
     def test_shared_codes_agree(self) -> None:
         from surveillance.api.client import AUTH_ERRORS, COMMON_ERRORS, ERRORS
 
