@@ -1,6 +1,11 @@
 """Tests for the Surveillance Station Transactions (POS) parsers."""
 
-from surveillance.services.transactions import parse_devices, parse_transactions
+from surveillance.services.transactions import (
+    Transaction,
+    fresh_receipts,
+    parse_devices,
+    parse_transactions,
+)
 
 
 def test_parse_devices_keeps_only_paired() -> None:
@@ -23,6 +28,7 @@ def test_parse_transactions_joins_lines_and_sorts_oldest_first() -> None:
                 "id": "1_4737",
                 "pos_id": 1,
                 "begin_tmstmp": 1792011709,
+                "end_tmstmp": 1792011760,
                 "camera_id": 0,
                 "content": [
                     {"line_id": 2, "content": "TOTAL P100 Cash"},
@@ -44,6 +50,8 @@ def test_parse_transactions_joins_lines_and_sorts_oldest_first() -> None:
     assert [t.id for t in txs] == ["3_1784", "1_4737"]
     assert txs[1].pos_id == 1
     assert txs[1].begin == 1792011709
+    assert txs[1].end == 1792011760
+    assert txs[0].end == 0
     assert txs[1].text == "#1 05:01:40 Lyn\n2x BILLIARD P100\nTOTAL P100 Cash"
 
 
@@ -98,3 +106,26 @@ def test_receipt_settings_are_registered_and_clamped() -> None:
         assert liveview._RECEIPT_SCALE_PERCENT == 70.0
     finally:
         liveview.set_receipt_scale_percent(old)
+
+
+def test_fresh_receipts_counts_a_sale_from_its_end() -> None:
+    cutoff = 1000.0
+    long_sale = Transaction(id="1_1", pos_id=1, begin=900, end=1010, text="a")
+    old_sale = Transaction(id="1_2", pos_id=1, begin=900, end=950, text="b")
+    open_sale = Transaction(id="1_3", pos_id=1, begin=1005, end=0, text="c")
+    seen: dict[str, str] = {}
+    assert fresh_receipts([long_sale, old_sale, open_sale], seen, cutoff) == [
+        long_sale,
+        open_sale,
+    ]
+    assert seen == {"1_1": "a", "1_2": "b", "1_3": "c"}
+    assert fresh_receipts([long_sale, old_sale, open_sale], seen, cutoff) == []
+
+
+def test_fresh_receipts_redraws_a_receipt_whose_text_grew() -> None:
+    seen: dict[str, str] = {}
+    first = Transaction(id="1_1", pos_id=1, begin=900, end=0, text="#1 Lyn")
+    assert fresh_receipts([first], seen, 1000.0) == []
+    grown = Transaction(id="1_1", pos_id=1, begin=900, end=0, text="#1 Lyn\n2x BEER")
+    assert fresh_receipts([grown], seen, 1000.0) == [grown]
+    assert seen == {"1_1": "#1 Lyn\n2x BEER"}

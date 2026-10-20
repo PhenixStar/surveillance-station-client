@@ -407,7 +407,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._transactions_available = True
         self._pos_cameras: dict[int, int] = {}  # POS device id -> camera id
         self._pos_cameras_at = 0.0
-        self._seen_transactions: set[str] = set()
+        self._seen_transactions: dict[str, str] = {}  # id -> text
 
         def _live_view() -> LiveView | None:
             from surveillance.ui.liveview import LiveView
@@ -435,21 +435,17 @@ class MainWindow(Gtk.ApplicationWindow):
             if cameras is not None:
                 self._pos_cameras = cameras
                 self._pos_cameras_at = time.monotonic()
+            from surveillance.services.transactions import fresh_receipts
             from surveillance.ui import liveview
 
             live = _live_view()
-            # Only receipts still inside the display window: startup and a
-            # camera newly brought on screen don't replay old sales.
             cutoff = time.time() - liveview._RECEIPT_SECONDS
-            for tx in transactions:
-                if tx.id in self._seen_transactions:
-                    continue
-                self._seen_transactions.add(tx.id)
+            for tx in fresh_receipts(transactions, self._seen_transactions, cutoff):
                 camera_id = self._pos_cameras.get(tx.pos_id)
-                if live is not None and camera_id and tx.begin >= cutoff:
+                if live is not None and camera_id:
                     live.show_transaction(camera_id, tx.text)
             if len(self._seen_transactions) > 500:
-                self._seen_transactions = {tx.id for tx in transactions}
+                self._seen_transactions = {tx.id: tx.text for tx in transactions}
 
         def _transactions_error(e: Exception) -> None:
             from surveillance.api.auth import SessionExpiredError

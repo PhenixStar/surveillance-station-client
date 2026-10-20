@@ -45,11 +45,13 @@ TRANSACTION_API = "SYNO.SurveillanceStation.Transactions.Transaction"
 
 @dataclass(frozen=True)
 class Transaction:
-    """One finished POS transaction: id is "<pos_id>_<serial>"."""
+    """One POS transaction: id is "<pos_id>_<serial>"; end is 0 when
+    the row carries no end time."""
 
     id: str
     pos_id: int
     begin: int
+    end: int
     text: str
 
 
@@ -91,6 +93,7 @@ def parse_transactions(data: Any) -> list[Transaction]:
                 id=str(row["id"]),
                 pos_id=int(row["pos_id"]),
                 begin=int(row.get("begin_tmstmp") or 0),
+                end=int(row.get("end_tmstmp") or 0),
                 text=text,
             )
         except (KeyError, TypeError, ValueError):
@@ -98,6 +101,28 @@ def parse_transactions(data: Any) -> list[Transaction]:
         if tx.text:
             result.append(tx)
     return sorted(result, key=lambda t: (t.begin, t.id))
+
+
+def fresh_receipts(
+    transactions: list[Transaction], seen: dict[str, str], cutoff: float
+) -> list[Transaction]:
+    """The transactions to draw now, recording each one's text in *seen*.
+
+    One whose text changed since it was last seen is still being rung up
+    and is drawn again. A new one is drawn only if it ended, or began when
+    it has no end yet, after *cutoff*: startup and a camera newly on screen do
+    not replay old sales, and a long sale that only shows up once it is
+    complete still counts from its end.
+    """
+    shown: list[Transaction] = []
+    for tx in transactions:
+        old = seen.get(tx.id)
+        if old == tx.text:
+            continue
+        seen[tx.id] = tx.text
+        if old is not None or max(tx.begin, tx.end) >= cutoff:
+            shown.append(tx)
+    return shown
 
 
 async def get_paired_devices(api: SurveillanceAPI) -> dict[int, int]:
