@@ -110,7 +110,7 @@ Pan/Tilt, Zoom, Focus, Preset, and Patrol controls for PTZ-capable cameras, in t
   <img src="assets/screenshots/snapshots.webp" alt="Snapshots page" width="100%">
 </p>
 
-Browse saved snapshots, filter by camera and time range, view, download, or delete. Take a snapshot straight from a Live View slot's right-click menu, which saves it to the snapshot database and offers a local copy. The full-size viewer supports scroll-to-zoom and click-and-drag panning.
+Browse saved snapshots, filter by camera and time range, view, download, or delete. A camera filter searches at most 5,000 snapshots of the time range, and the page count says so when the range holds more; narrow the range to reach the rest. Take a snapshot straight from a Live View slot's right-click menu, which saves it to the snapshot database and offers a local copy. The full-size viewer supports scroll-to-zoom and click-and-drag panning.
 </details>
 <details>
 <summary><b>Time Lapse</b></summary>

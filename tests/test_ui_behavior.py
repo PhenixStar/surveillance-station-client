@@ -1480,3 +1480,32 @@ class TestFilterButtonShowsActiveFilter:
 
     def test_all_event_types_unmarks_it(self) -> None:
         assert self._apply(None) == [False]
+
+
+class TestSnapshotSearchCap:
+    """A camera-filtered load fetches at most _FETCH_ALL_LIMIT snapshots
+    and filters them here; when the NAS has more in the range, the page
+    has to say so instead of passing a short list off as complete."""
+
+    @staticmethod
+    def _rendered(fetched: int, total: int) -> str:
+        from surveillance.ui.snapshots import SnapshotsView
+
+        rendered: list[str] = []
+        view = SimpleNamespace(
+            _multi_camera_filter={1},
+            _snapshots=[SimpleNamespace(camera_id=1)] * fetched,
+            _fetched_total=total,
+            _page=0,
+            _render_page=lambda rows, count, note="": rendered.append(note),
+        )
+        SnapshotsView._render_multi_camera_page(view)  # type: ignore[arg-type]
+        return rendered[0]
+
+    def test_a_complete_fetch_says_nothing(self) -> None:
+        assert self._rendered(30, 30) == ""
+
+    def test_a_capped_fetch_says_how_much_was_searched(self) -> None:
+        assert self._rendered(5000, 7200) == (
+            ", only 5000 of the 7200 snapshots in this time range searched"
+        )

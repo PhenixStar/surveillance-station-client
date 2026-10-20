@@ -93,6 +93,9 @@ class SnapshotsView(Gtk.Box):
         self.window = window
         self.app = window.app
         self._snapshots: list[Snapshot] = []
+        # How many the NAS has in the time range, of which a client-side
+        # filtered load fetched at most _FETCH_ALL_LIMIT.
+        self._fetched_total = 0
         self._total = 0
         self._page = 0
         # The cameras a client-side filtered load keeps, set whenever a
@@ -496,7 +499,7 @@ class SnapshotsView(Gtk.Box):
         if self._reload_pending:
             self._load_snapshots()
             return
-        snapshots, _total = result
+        snapshots, self._fetched_total = result
         self._resolve_camera_ids(snapshots)
         self._snapshots = snapshots
         self._render_multi_camera_page()
@@ -509,9 +512,15 @@ class SnapshotsView(Gtk.Box):
         total_pages = max(1, (len(filtered) + _PAGE_SIZE - 1) // _PAGE_SIZE)
         self._page = max(0, min(self._page, total_pages - 1))
         start = self._page * _PAGE_SIZE
-        self._render_page(filtered[start : start + _PAGE_SIZE], len(filtered))
+        note = ""
+        if len(self._snapshots) < self._fetched_total:
+            note = (
+                f", only {len(self._snapshots)} of the {self._fetched_total} "
+                "snapshots in this time range searched"
+            )
+        self._render_page(filtered[start : start + _PAGE_SIZE], len(filtered), note)
 
-    def _render_page(self, page_snapshots: list[Snapshot], total: int) -> None:
+    def _render_page(self, page_snapshots: list[Snapshot], total: int, note: str = "") -> None:
         """Rebuild the visible rows and pagination controls for one page —
         shared by the server-paginated (single camera or none) and
         client-paginated (multi-camera fallback) load paths."""
@@ -532,7 +541,7 @@ class SnapshotsView(Gtk.Box):
             return
         self.prev_btn.set_sensitive(self._page > 0)
         self.next_btn.set_sensitive(self._page < total_pages - 1)
-        self.page_label.set_text(f"Page {self._page + 1} of {total_pages} ({total} total)")
+        self.page_label.set_text(f"Page {self._page + 1} of {total_pages} ({total} total{note})")
 
     def _update_filter_summary(self) -> None:
         """Always show active filter state above the list."""
