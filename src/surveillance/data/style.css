@@ -228,7 +228,7 @@
     text-shadow: 0 0 3px #000, 0 0 3px #000;
 }
 
-/* POS receipt (Surveillance Station Transactions) over a Live View slot —
+/* POS receipt (Surveillance Station Transactions) over a Live View slot:
    same translucent black as the header and toolbar, monospace so item
    columns line up. */
 .slot-receipt {

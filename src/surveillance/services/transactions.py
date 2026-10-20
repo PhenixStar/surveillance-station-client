@@ -78,7 +78,7 @@ def parse_devices(data: Any) -> dict[int, int]:
 def parse_transactions(data: Any) -> list[Transaction]:
     """Transactions oldest first; each row's content lines joined as text.
 
-    Rows carry camera_id 0 — the device pairing is the only link to a camera.
+    Rows carry camera_id 0: the device pairing is the only link to a camera.
     """
     result: list[Transaction] = []
     for row in _rows(data):

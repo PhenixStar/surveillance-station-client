@@ -430,7 +430,7 @@ class CameraSlot(Gtk.Box):
         self._player_overlay.add_overlay(self._toolbar)
 
         # POS receipt (Surveillance Station Transactions) over the top-left
-        # of the video — the hover toolbar owns the bottom edge. Not a
+        # of the video, since the hover toolbar owns the bottom edge. Not a
         # pointer target, so hover, zoom/pan and the context menu still
         # reach the player underneath.
         self._receipt = Gtk.Label(xalign=0)
