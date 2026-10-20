@@ -236,13 +236,15 @@ automatically at high History playback speeds, the shared demuxer byte
 cap, the cap on each player's back buffer, and the
 speed-times-active-slots budget the Live View timeline's
 History speed dropdown enforces, plus an on-screen readout of cache
-depth/target/effective speed for diagnosing buffering, and the POS
-receipt overlay (on or off, text size, maximum lines, time on screen).
-Each setting has its own reset-to-default button, plus one that resets
-everything on the page at once. Changes apply to the next stream that
-starts (the on-screen readout takes effect immediately, the receipt
-overlay with the next receipt, and the speed budget the next time the
-speed dropdown opens) and persist across restarts.
+depth/target/effective speed for diagnosing buffering, the POS receipt
+overlay (on or off, text size, maximum lines, time on screen), and a
+switch that decodes events as before Surveillance Station 9.3, for
+testing. Each setting has its own reset-to-default button, plus one that
+resets everything on the page at once. Changes apply to the next stream
+that starts (the on-screen readout takes effect immediately, the receipt
+overlay with the next receipt, the event decoding switch from the next
+login, and the speed budget the next time the speed dropdown opens) and
+persist across restarts.
 .TP
 .B About
 Shows the version, license, and repository links, and checks the GitHub
