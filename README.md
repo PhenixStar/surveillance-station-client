@@ -791,6 +791,7 @@ surveillance-station-client/
     ├── test_services.py
     ├── test_settings_registry.py
     ├── test_timeline.py
+    ├── test_transactions.py
     ├── test_ui_behavior.py
     ├── test_update_check.py
     └── test_ws_bridge.py
