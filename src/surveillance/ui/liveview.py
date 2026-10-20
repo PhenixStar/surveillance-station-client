@@ -442,6 +442,9 @@ class CameraSlot(Gtk.Box):
         self._receipt.set_can_target(False)
         self._receipt.set_visible(False)
         self._player_overlay.add_overlay(self._receipt)
+        # An overlay child is never allocated below its minimum size, so
+        # a receipt taller than a small tile would run into the next slot.
+        self._player_overlay.set_clip_overlay(self._receipt, True)
         self._receipt_hide_id = 0
 
         # On the player, not the overlay: the toolbar is an overlay child,
