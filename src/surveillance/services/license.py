@@ -85,17 +85,17 @@ async def add_license_online(api: SurveillanceAPI, license_keys: list[str]) -> N
 async def get_device_info(api: SurveillanceAPI) -> tuple[str, str]:
     """Get NAS serial number and model via SYNO.SurveillanceStation.Info.
 
-    Returns (serial, model).
+    Returns (serial, model). The serial only comes from version 2 on,
+    and the model is DSModelName, as the official app reads it (asking
+    for up to version 8; the client clamps to what the NAS offers).
     """
     data = await api.request(
         api="SYNO.SurveillanceStation.Info",
         method="GetInfo",
-        version=1,
+        version=8,
     )
     log.debug("Device info keys: %s", list(data.keys()))
-    serial = data.get("serial", data.get("dsSerial", ""))
-    model = data.get("model", data.get("dsModel", ""))
-    return serial, model
+    return data.get("serial", ""), data.get("DSModelName", "")
 
 
 def _offline_encrypt(content: str, serial: str, seed: int) -> str:

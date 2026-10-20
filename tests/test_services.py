@@ -632,6 +632,17 @@ class TestLicenseService:
             assert call_kwargs[1]["extra_params"]["lic_list"] == "1,2"
 
     @pytest.mark.asyncio
+    async def test_get_device_info_reads_the_app_fields(self, api: SurveillanceAPI) -> None:
+        """GetInfo has the serial from version 2 and the model as
+        DSModelName; offline licensing sends both to Synology."""
+        from surveillance.services.license import get_device_info
+
+        reply = {"serial": "1930PDN123456", "DSModelName": "DS918+", "version": {}}
+        with patch.object(api, "request", new_callable=AsyncMock, return_value=reply) as mock:
+            assert await get_device_info(api) == ("1930PDN123456", "DS918+")
+            assert mock.call_args[1]["version"] == 8
+
+    @pytest.mark.asyncio
     async def test_add_license_online(self, api: SurveillanceAPI) -> None:
         from surveillance.services.license import add_license_online
 
