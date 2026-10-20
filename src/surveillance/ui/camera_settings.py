@@ -95,6 +95,11 @@ class CameraSettingsDialog(Gtk.Window):
         box.append(label)
 
         current_proto = self.app.config.camera_protocols.get(cam.id, "auto")
+        # A protocol hand-edited into config.toml that the client does not
+        # know: show Auto, so Apply replaces it rather than the dialog
+        # failing to open.
+        if current_proto not in PROTOCOL_LABELS:
+            current_proto = "auto"
 
         # Radio buttons for each protocol
         group: Gtk.CheckButton | None = None
