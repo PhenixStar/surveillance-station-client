@@ -405,7 +405,8 @@ class MainWindow(Gtk.ApplicationWindow):
         from surveillance.util.async_bridge import run_async
 
         self._transactions_available = True
-        self._pos_cameras: dict[int, int] = {}  # POS device id -> camera id
+        # POS device id -> camera id, None until first read.
+        self._pos_cameras: dict[int, int] | None = None
         self._pos_cameras_at = 0.0
         self._seen_transactions: dict[str, str] = {}  # id -> text
 
@@ -415,7 +416,11 @@ class MainWindow(Gtk.ApplicationWindow):
             live = self.stack.get_child_by_name("live")
             return live if isinstance(live, LiveView) else None
 
-        async def _fetch() -> tuple[dict[int, int] | None, tuple[int, list[Transaction]]]:
+        async def _fetch(
+            shown: set[int], paired: dict[int, int] | None
+        ) -> tuple[dict[int, int] | None, tuple[int, list[Transaction]]]:
+            """Re-read the pairing when *paired* is None, then the
+            receipts if a paired camera is among *shown*."""
             from surveillance.services.transactions import (
                 get_paired_devices,
                 get_recent_transactions,
@@ -425,9 +430,10 @@ class MainWindow(Gtk.ApplicationWindow):
             if api is None:
                 return None, (0, [])
             cameras = None
-            # The pairing rarely changes; re-read it every few minutes.
-            if not self._pos_cameras or time.monotonic() - self._pos_cameras_at > 300:
-                cameras = await get_paired_devices(api)
+            if paired is None:
+                cameras = paired = await get_paired_devices(api)
+            if not shown & set(paired.values()):
+                return cameras, (0, [])
             return cameras, await get_recent_transactions(api)
 
         def _apply(result: tuple[dict[int, int] | None, tuple[int, list[Transaction]]]) -> None:
@@ -442,8 +448,9 @@ class MainWindow(Gtk.ApplicationWindow):
             # The NAS's own clock, as receipt times are in it: a client
             # running a minute fast would otherwise see every one as stale.
             cutoff = (now or time.time()) - liveview._RECEIPT_SECONDS
+            paired = self._pos_cameras or {}
             for tx in fresh_receipts(transactions, self._seen_transactions, cutoff):
-                camera_id = self._pos_cameras.get(tx.pos_id)
+                camera_id = paired.get(tx.pos_id)
                 if live is not None and camera_id:
                     live.show_transaction(camera_id, tx.text)
             if len(self._seen_transactions) > 500:
@@ -478,13 +485,17 @@ class MainWindow(Gtk.ApplicationWindow):
             live = _live_view()
             if live is None:
                 return True
+            shown = live.displayed_camera_ids()
+            paired = self._pos_cameras
+            # The pairing rarely changes; re-read it every few minutes.
+            if paired is not None and time.monotonic() - self._pos_cameras_at > 300:
+                paired = None
             # Nothing to draw on: skip the request (each row carries a
-            # snapshot) until a paired camera is on screen.
-            if self._pos_cameras and not (
-                live.displayed_camera_ids() & set(self._pos_cameras.values())
-            ):
+            # snapshot) until a paired camera is on screen, also when
+            # nothing is paired at all.
+            if paired is not None and not shown & set(paired.values()):
                 return True
-            run_async(_fetch(), callback=_apply, error_callback=_transactions_error)
+            run_async(_fetch(shown, paired), callback=_apply, error_callback=_transactions_error)
             return True
 
         self._transactions_poll_id = GLib.timeout_add_seconds(
