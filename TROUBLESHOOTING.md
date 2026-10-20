@@ -358,11 +358,16 @@ Likely causes:
 If a download fails an alert appears naming the camera and the underlying
 error. The most common cases:
 
-- **"server returned HTML"** - the DSM session expired and the download was
-  redirected to the login page. Quit the app, log back in, retry.
-- **"empty response"** - same root cause; nothing was returned.
-- **error code 105** - the logged-in account lacks download permission. Grant
-  it in *Surveillance Station > User Privilege > [user] > Recording*.
+- **"Server returned an HTML page — session expired or access denied"** -
+  a web page came back instead of the file. The app has already logged in
+  again and retried by the time this shows, so an expired session is not
+  the cause: look for something between the app and DSM, such as a reverse
+  proxy or a portal login page, that answers `/webapi/` requests itself.
+- **"Server returned an empty response body"** - DSM sent no data for the
+  file.
+- **"Insufficient user privilege"** - the logged-in account lacks download
+  permission. Grant it in *Surveillance Station > User Privilege > [user] >
+  Recording*.
 
 ## Segmentation fault
 
