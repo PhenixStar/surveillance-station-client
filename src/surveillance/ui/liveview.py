@@ -3498,13 +3498,21 @@ class LiveView(Gtk.Box):
         self._cameras = cameras
         self._restore_layout_cameras()
 
+    def _shown_slots(self) -> list[CameraSlot]:
+        """Slots on screen with a camera: none while another page is
+        shown, and never a hidden one, which keeps its camera across
+        layout switches."""
+        if self._streams_paused:
+            return []
+        return [self._slots[i] for i in self._active if self._slots[i].camera is not None]
+
     def displayed_camera_ids(self) -> set[int]:
-        """Cameras currently assigned to any slot."""
-        return {slot.camera.id for slot in self._slots if slot.camera is not None}
+        """Cameras currently on screen."""
+        return {slot.camera.id for slot in self._shown_slots() if slot.camera is not None}
 
     def show_transaction(self, camera_id: int, text: str) -> None:
-        """Show a POS receipt over every slot showing *camera_id*."""
-        for slot in self._slots:
+        """Show a POS receipt over every slot on screen showing *camera_id*."""
+        for slot in self._shown_slots():
             if slot.camera is not None and slot.camera.id == camera_id:
                 slot.show_receipt(text)
 

@@ -136,3 +136,36 @@ def test_parse_server_time() -> None:
     assert parse_server_time({"data": [], "timestamp": "1505355467"}) == 1505355467
     assert parse_server_time({"data": []}) == 0
     assert parse_server_time([]) == 0
+
+
+def test_only_slots_on_screen_count() -> None:
+    """A hidden slot keeps its camera across layout switches, and the
+    Live page keeps every camera while another page is shown: neither is
+    on screen, so neither draws a receipt or keeps the poll going."""
+    from types import SimpleNamespace
+
+    from surveillance.ui.liveview import LiveView
+
+    shown: list[int] = []
+
+    def slot(index: int, camera_id: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            camera=SimpleNamespace(id=camera_id),
+            show_receipt=lambda text: shown.append(index),
+        )
+
+    page = SimpleNamespace(
+        _slots=[slot(0, 7), slot(1, 7), slot(2, 8)],
+        _active=[0],
+        _streams_paused=False,
+    )
+    page._shown_slots = lambda: LiveView._shown_slots(page)  # type: ignore[arg-type]
+
+    assert LiveView.displayed_camera_ids(page) == {7}  # type: ignore[arg-type]
+    LiveView.show_transaction(page, 7, "receipt")  # type: ignore[arg-type]
+    assert shown == [0]
+
+    page._streams_paused = True
+    assert LiveView.displayed_camera_ids(page) == set()  # type: ignore[arg-type]
+    LiveView.show_transaction(page, 7, "receipt")  # type: ignore[arg-type]
+    assert shown == [0]
