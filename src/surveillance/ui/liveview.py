@@ -379,7 +379,7 @@ def set_receipt_max_lines(value: float) -> None:
 
 def set_receipt_seconds(value: float) -> None:
     global _RECEIPT_SECONDS
-    _RECEIPT_SECONDS = max(1, int(value))
+    _RECEIPT_SECONDS = max(5, int(value))
 
 
 def receipt_lines(text: str, max_lines: int) -> str:
