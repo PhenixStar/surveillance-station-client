@@ -251,3 +251,20 @@ def test_no_transactions_privilege_still_ends_in_105() -> None:
             asyncio.run(get_paired_devices(api))  # type: ignore[arg-type]
     assert exc.value.code == 105
     assert logins == ["Login"]
+
+
+def test_one_malformed_row_does_not_hide_the_others() -> None:
+    good = {
+        "id": "1_1",
+        "pos_id": 1,
+        "begin_tmstmp": 10,
+        "content": [{"line_id": 1, "content": "TOTAL 5.00"}],
+    }
+    for content in (
+        ["stray string"],
+        [None],
+        [{"line_id": None, "content": "a"}, {"line_id": 1, "content": "b"}],
+        "TOTAL",
+    ):
+        bad = {"id": "1_2", "pos_id": 1, "begin_tmstmp": 11, "content": content}
+        assert "1_1" in [t.id for t in parse_transactions({"data": [good, bad]})]

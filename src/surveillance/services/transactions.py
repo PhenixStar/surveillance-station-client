@@ -82,10 +82,10 @@ def parse_transactions(data: Any) -> list[Transaction]:
     """
     result: list[Transaction] = []
     for row in _rows(data):
+        parts = [p for p in row.get("content") or [] if isinstance(p, dict)]
         lines = [
             str(part.get("content", ""))
-            for part in sorted(row.get("content") or [], key=lambda p: p.get("line_id", 0))
-            if isinstance(part, dict)
+            for part in sorted(parts, key=lambda p: p.get("line_id") or 0)
         ]
         text = "\n".join(line for line in lines if line).strip()
         try:
