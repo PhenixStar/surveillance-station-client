@@ -139,7 +139,7 @@ On Surveillance Station 9.3 and later, events and their types come from the Even
 <details>
 <summary><b>Notifications</b></summary>
 
-Notification bell in the header bar with an unread badge and a popover listing Surveillance Station's newest notifications (motion, connection lost/restored, alarm, camera disabled/enabled), polled every 30 seconds. **Mark these read** clears them on the NAS.
+Notification bell in the header bar with an unread badge and a popover listing Surveillance Station's newest notifications (motion, connection lost/restored, alarm, camera disabled/enabled), polled every 30 seconds. **Mark these read** marks them read on the NAS: they stay in the list, no longer in bold, and leave the badge count.
 </details>
 <details>
 <summary><b>Home Mode</b></summary>
