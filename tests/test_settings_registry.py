@@ -104,6 +104,16 @@ class TestRegistryShape:
         assert list(setting.options) == ["camera", "high", "balanced", "low"]
         assert setting.default == "camera"
 
+    def test_whole_number_defaults_sit_on_a_tick(self) -> None:
+        """A whole-number spinner snaps to minimum + k * step, rounding a
+        tie up, so a default off that grid shows (and on the next focus
+        change saves) the tick above it."""
+        for section in SECTIONS:
+            for setting in section.settings:
+                if setting.digits == 0:
+                    ticks = (setting.default - setting.minimum) / setting.step
+                    assert ticks == int(ticks), setting.key
+
     def test_every_setting_has_a_tooltip(self) -> None:
         for section in SECTIONS:
             for setting in section.settings:

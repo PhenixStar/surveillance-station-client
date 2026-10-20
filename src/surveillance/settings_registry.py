@@ -304,7 +304,7 @@ def _receipt_settings() -> list[Setting]:
             set=liveview.set_receipt_scale_percent,
             minimum=25.0,
             maximum=400.0,
-            step=10.0,
+            step=5.0,
             digits=0,
         ),
         Setting(
