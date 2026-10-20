@@ -173,3 +173,30 @@ def test_only_slots_on_screen_count() -> None:
     assert LiveView.displayed_camera_ids(page) == set()  # type: ignore[arg-type]
     LiveView.show_transaction(page, 7, "receipt")  # type: ignore[arg-type]
     assert shown == [0]
+
+
+def test_requests_never_log_in_again() -> None:
+    """105 is Surveillance Station's answer to an account without the
+    Transactions privilege; request() would take it for an expired
+    session and log in again, so neither call may go through it."""
+    import asyncio
+
+    from surveillance.services.transactions import (
+        get_paired_devices,
+        get_recent_transactions,
+    )
+
+    calls: list[str] = []
+
+    class _API:
+        async def request(self, **kwargs: object) -> object:
+            raise AssertionError("request() logs in again on 105")
+
+        async def raw_request(self, api: str, method: str, **kwargs: object) -> object:
+            calls.append(api.rsplit(".", 1)[1])
+            return {"data": [], "timestamp": "7"}
+
+    api = _API()
+    assert asyncio.run(get_paired_devices(api)) == {}  # type: ignore[arg-type]
+    assert asyncio.run(get_recent_transactions(api)) == (7, [])  # type: ignore[arg-type]
+    assert calls == ["Device", "Transaction"]

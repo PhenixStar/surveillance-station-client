@@ -133,9 +133,15 @@ def fresh_receipts(
     return shown
 
 
+# Both calls use raw_request, not request: an account without the
+# Transactions privilege gets 105, which request() takes for an expired
+# session and answers with a fresh login. The other polls still recover
+# a session that really expired.
+
+
 async def get_paired_devices(api: SurveillanceAPI) -> dict[int, int]:
     """POS device id -> paired camera id."""
-    data = await api.request(api=DEVICE_API, method="Enum", version=1)
+    data = await api.raw_request(api=DEVICE_API, method="Enum", version=1)
     return parse_devices(data)
 
 
@@ -146,7 +152,7 @@ async def get_recent_transactions(
 
     Kept small on purpose: every row embeds a ~14 KB base64 snapshot.
     """
-    data = await api.request(
+    data = await api.raw_request(
         api=TRANSACTION_API,
         method="Enum",
         version=2,
