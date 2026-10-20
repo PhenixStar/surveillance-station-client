@@ -111,12 +111,14 @@ def test_receipt_settings_are_registered_and_clamped() -> None:
         assert liveview._RECEIPT_SCALE_PERCENT == 70.0
     finally:
         liveview.set_receipt_scale_percent(old)
-    # A hand-edited config below the spinner's floor lands on it.
+    # A hand-edited config outside the spinner's range lands on its end.
     for setting in section.settings:
         before = setting.get()
         try:
             setting.set(setting.minimum - 1)
             assert setting.get() == setting.minimum, setting.key
+            setting.set(1e10)
+            assert setting.get() == setting.maximum, setting.key
         finally:
             setting.set(before)
 

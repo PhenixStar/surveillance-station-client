@@ -360,6 +360,12 @@ _RECEIPT_ENABLED = True
 _RECEIPT_SCALE_PERCENT = 100.0
 _RECEIPT_MAX_LINES = 14
 _RECEIPT_SECONDS = 60
+# The Settings page's bounds, also held to by a value hand-edited into
+# config.toml: a time on screen past GLib's 32-bit limit made
+# timeout_add_seconds raise after the receipt was already shown.
+RECEIPT_SCALE_RANGE = (25.0, 400.0)
+RECEIPT_MAX_LINES_RANGE = (3, 40)
+RECEIPT_SECONDS_RANGE = (5, 600)
 
 
 def set_receipt_enabled(value: bool) -> None:
@@ -369,17 +375,20 @@ def set_receipt_enabled(value: bool) -> None:
 
 def set_receipt_scale_percent(value: float) -> None:
     global _RECEIPT_SCALE_PERCENT
-    _RECEIPT_SCALE_PERCENT = min(400.0, max(25.0, float(value)))
+    low, high = RECEIPT_SCALE_RANGE
+    _RECEIPT_SCALE_PERCENT = min(high, max(low, float(value)))
 
 
 def set_receipt_max_lines(value: float) -> None:
     global _RECEIPT_MAX_LINES
-    _RECEIPT_MAX_LINES = max(3, int(value))
+    low, high = RECEIPT_MAX_LINES_RANGE
+    _RECEIPT_MAX_LINES = min(high, max(low, int(value)))
 
 
 def set_receipt_seconds(value: float) -> None:
     global _RECEIPT_SECONDS
-    _RECEIPT_SECONDS = max(5, int(value))
+    low, high = RECEIPT_SECONDS_RANGE
+    _RECEIPT_SECONDS = min(high, max(low, int(value)))
 
 
 def receipt_lines(text: str, max_lines: int) -> str:
