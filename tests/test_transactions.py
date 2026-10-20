@@ -85,7 +85,11 @@ def test_receipt_lines_keeps_header_and_total() -> None:
     assert capped[0] == "#1 05:00 Lyn"
     assert capped[-1] == "TOTAL P1 Cash"
     assert "more lines" in capped[2]
-    assert receipt_lines(text, 2).splitlines() == ["#1 05:00 Lyn", "1x item0"]
+    assert receipt_lines(text, 3).splitlines() == [
+        "#1 05:00 Lyn",
+        "… 10 more lines",
+        "TOTAL P1 Cash",
+    ]
 
 
 def test_receipt_settings_are_registered_and_clamped() -> None:

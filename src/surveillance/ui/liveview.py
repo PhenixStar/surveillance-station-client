@@ -374,7 +374,7 @@ def set_receipt_scale_percent(value: float) -> None:
 
 def set_receipt_max_lines(value: float) -> None:
     global _RECEIPT_MAX_LINES
-    _RECEIPT_MAX_LINES = max(1, int(value))
+    _RECEIPT_MAX_LINES = max(3, int(value))
 
 
 def set_receipt_seconds(value: float) -> None:
@@ -388,8 +388,6 @@ def receipt_lines(text: str, max_lines: int) -> str:
     lines = text.splitlines()
     if len(lines) <= max_lines:
         return text
-    if max_lines <= 2:
-        return "\n".join(lines[:max_lines])
     tail = (max_lines - 1) // 2
     head = max_lines - 1 - tail
     hidden = len(lines) - head - tail

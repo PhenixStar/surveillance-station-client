@@ -318,7 +318,7 @@ def _receipt_settings() -> list[Setting]:
             default=float(liveview._RECEIPT_MAX_LINES),
             get=lambda: float(liveview._RECEIPT_MAX_LINES),
             set=liveview.set_receipt_max_lines,
-            minimum=2.0,
+            minimum=3.0,
             maximum=40.0,
             step=1.0,
             digits=0,
