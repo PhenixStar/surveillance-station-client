@@ -801,6 +801,7 @@ class CameraSlot(Gtk.Box):
         self.stop_stream()
         self.stop_ptt()
         self.hide_receipt()
+        self.player.set_dewarp("")
         self.player.reset_zoom()
         self._toolbar.clear()
         self.set_history_mode(False)
@@ -3150,7 +3151,7 @@ class LiveView(Gtk.Box):
             slot.set_history_mode(False)
             self._set_history_position(slot, None)
             self._sync_history_active()
-            slot.player.reset_zoom()  # the placeholder card is never zoomed
+            slot.player.set_dewarp("")  # the placeholder card is never zoomed or dewarped
             slot.set_status("offline")
             slot.player.play(OFFLINE_PLACEHOLDER_URL)
             return
@@ -3174,6 +3175,13 @@ class LiveView(Gtk.Box):
         slot.player.set_paused(self._timeline_paused)
 
         api = self.app.api
+        # Fisheye dewarp follows the camera, set before the first frame.
+        from surveillance.ui.fisheye import parse_lens
+
+        slot.player.set_dewarp(
+            self.app.config.camera_dewarp.get(camera.id, ""),
+            parse_lens(self.app.config.camera_fisheye_lens.get(camera.id, "")),
+        )
         protocol = self.app.config.camera_protocols.get(camera.id, "auto")
         override = self.app.config.camera_overrides.get(camera.id, "")
         camera_stream_profile = self.app.config.camera_live_view_stream_profiles.get(
@@ -3481,7 +3489,7 @@ class LiveView(Gtk.Box):
         # camera-to-camera switch), just targeting a local synthetic
         # stream instead of the dead network one, so it can't wedge.
         slot.stop_stream()
-        slot.player.reset_zoom()  # the placeholder card is never zoomed
+        slot.player.set_dewarp("")  # the placeholder card is never zoomed or dewarped
         slot.set_status("stream lost")
         slot.player.play(OFFLINE_PLACEHOLDER_URL)
 

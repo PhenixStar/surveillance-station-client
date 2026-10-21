@@ -44,6 +44,8 @@ gi.require_version("Gtk", "4.0")
 
 from gi.repository import GLib, Gtk  # type: ignore[import-untyped]
 
+from surveillance.ui.fisheye import DewarpView, FisheyeRenderer, Lens
+
 log = logging.getLogger(__name__)
 
 
@@ -378,6 +380,10 @@ class MpvGLArea(Gtk.GLArea):
         # self._mpv.speed and so _tick_cache_control can report the true
         # playback multiplier.
         self._history_speed: float = 1.0
+        # Fisheye dewarp (ui.fisheye): the view state, and its GL objects,
+        # created on the first dewarped render with the context current.
+        self._dewarp = DewarpView()
+        self._fisheye: FisheyeRenderer | None = None
 
         self.set_auto_render(False)
         self.set_hexpand(True)
@@ -481,6 +487,10 @@ class MpvGLArea(Gtk.GLArea):
     def _on_unrealize(self, widget: Gtk.GLArea) -> None:
         """Clean up mpv when widget is unrealized."""
         self.stop()
+        if self._fisheye is not None:
+            self.make_current()
+            self._fisheye.free()
+            self._fisheye = None
         if self._ctx:
             with contextlib.suppress(Exception):
                 self._ctx.free()
@@ -517,6 +527,12 @@ class MpvGLArea(Gtk.GLArea):
 
             fbo = int(glGetIntegerv(GL_FRAMEBUFFER_BINDING))
 
+            if self._dewarp.active and self._render_dewarped(
+                ctx, fbo, width * scale, height * scale
+            ):
+                self._ctx.report_swap()
+                return True
+
             self._ctx.render(
                 flip_y=True,
                 opengl_fbo={
@@ -530,6 +546,50 @@ class MpvGLArea(Gtk.GLArea):
             log.debug("Render error: %s", e)
 
         return True
+
+    def _render_dewarped(self, gl_context: Any, fbo: int, width: int, height: int) -> bool:
+        """Render the frame through the fisheye dewarp into *fbo*.
+
+        mpv draws into an offscreen texture at the video's own size, so
+        the circle keeps its full resolution, and the dewarp shader then
+        fills the widget from it. Returns False, having turned the dewarp
+        off for this widget, when GL can't do it, so the caller falls back
+        to the plain picture rather than a black slot.
+        """
+        if self._ctx is None:
+            return False
+        try:
+            if self._fisheye is None:
+                self._fisheye = FisheyeRenderer(bool(gl_context.get_use_es()))
+            src_w = int(self._mpv.dwidth or 0) if self._mpv else 0
+            src_h = int(self._mpv.dheight or 0) if self._mpv else 0
+            if src_w <= 0 or src_h <= 0:
+                src_w, src_h = width, height
+            limit = 4096
+            if max(src_w, src_h) > limit:
+                f = limit / max(src_w, src_h)
+                src_w, src_h = int(src_w * f), int(src_h * f)
+            target = self._fisheye.target(src_w, src_h)
+            self._ctx.render(flip_y=True, opengl_fbo={"w": src_w, "h": src_h, "fbo": target})
+            self._fisheye.draw(fbo, width, height, self._dewarp)
+        except Exception:
+            log.exception("Fisheye dewarp failed; showing the plain picture")
+            self._dewarp.mode = ""
+            from OpenGL.GL import GL_FRAMEBUFFER, glBindFramebuffer
+
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+            return False
+        return True
+
+    def set_dewarp(self, mode: str, lens: Lens | None = None) -> None:
+        """Show this widget's video dewarped (ui.fisheye MODE_*), or as
+        delivered with mode "". Starts from the default view and drops any
+        flat zoom, which the dewarp's own zoom replaces."""
+        self._dewarp.mode = mode
+        self._dewarp.lens = lens or Lens()
+        self._dewarp.reset()
+        self.reset_zoom()
+        self.queue_render()
 
     def _mpv_update_cb(self) -> None:
         """Called by mpv from its thread when a new frame is available.
@@ -870,6 +930,11 @@ class MpvGLArea(Gtk.GLArea):
         """
         if not self._mpv or not self._initialized:
             return
+        if self._dewarp.active:
+            # The dewarp's own zoom (virtual PTZ field of view).
+            self._dewarp.zoom(delta)
+            self.queue_render()
+            return
 
         width = self.get_width()
         height = self.get_height()
@@ -923,6 +988,11 @@ class MpvGLArea(Gtk.GLArea):
         at 1:1 is always one scroll-out away from being undone)."""
         if not self._mpv or not self._initialized:
             return
+        if self._dewarp.active:
+            # Look around instead of moving the flat picture.
+            self._dewarp.drag(dx_fraction, dy_fraction)
+            self.queue_render()
+            return
         scale = 2**self._zoom
         letterbox_x, letterbox_y = self._letterbox_fraction(self.get_width(), self.get_height())
         self._pan_x = max(
@@ -936,7 +1006,9 @@ class MpvGLArea(Gtk.GLArea):
             self._mpv.video_pan_y = self._pan_y
 
     def reset_zoom(self) -> None:
-        """Reset zoom/pan to the default 1:1 view."""
+        """Reset zoom/pan to the default 1:1 view, and a dewarp to its
+        starting view."""
+        self._dewarp.reset()
         self._zoom = 0.0
         self._pan_x = 0.0
         self._pan_y = 0.0
