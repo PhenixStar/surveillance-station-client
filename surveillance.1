@@ -21,6 +21,17 @@ grid menu after a confirmation prompt.
 Scroll the mouse wheel over a slot to zoom in, centered on the cursor;
 click and drag to pan. Zoom resets when switching layouts or leaving the
 page.
+A fisheye camera looking straight down can be shown dewarped, chosen with
+.B Fisheye dewarp
+in its Camera Settings:
+.I Panorama
+unrolls the circle into two stacked 180 degree strips with the rim on top,
+turned by dragging sideways;
+.I Virtual PTZ
+shows a flat view steered by dragging and zoomed with the mouse wheel.
+Both apply to live and recorded video in Live View, keep their view across
+a Reload and reset like the zoom.
+A graphics driver that cannot run the dewarp shows the plain picture.
 Streams are muted by default; hovering a slot reveals a toolbar with
 mute/volume (remembered per camera) and a Snapshot button.
 Audio reaches the player over the RTSP-family protocols
@@ -371,9 +382,27 @@ its default. An RTSP stream always carries the camera's Live View
 setting in Surveillance Station, and a direct URL decides its stream
 itself.
 .PP
+The
+.B camera_dewarp
+section selects a fisheye dewarp per camera,
+.B panorama
+or
+.BR ptz ,
+for a lens looking straight down; a camera with no entry is shown as
+delivered.
+.PP
 These settings can be configured from
 .B Camera Settings
 by right-clicking a camera in the sidebar.
+.PP
+The
+.B camera_fisheye_lens
+section, set only in the file, calibrates a fisheye lens per camera when
+the default, a centred full circle of 180 degrees, does not fit:
+.RI \(dq center_x , center_y , radius , fov \(dq,
+the centre as fractions of the frame width and height, the radius as a
+fraction of its height and the lens's field of view in degrees.
+A missing or invalid field keeps its default.
 .PP
 The
 .B camera_volume
