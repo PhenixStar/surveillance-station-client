@@ -484,6 +484,59 @@ class TestOfflineCard:
         assert page.timeline.called("set_history_active") == [(False,), (True,)]
 
 
+class TestDewarpWaitsForTheStream:
+    """A retried slot still shows the offline or stream lost card while
+    its URL is fetched, and keeps it if that fails: dewarped there, the
+    card came out garbled."""
+
+    @staticmethod
+    def _config() -> SimpleNamespace:
+        return SimpleNamespace(
+            camera_dewarp={1: MODE_PTZ},
+            camera_fisheye_lens={},
+            camera_fisheye_mount={},
+            camera_protocols={},
+            camera_overrides={},
+            camera_live_view_stream_profiles={},
+        )
+
+    def test_not_while_the_url_is_fetched(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def failing_fetch(
+            coro: object, callback: object = None, error_callback: object = None
+        ) -> None:
+            coro.close()  # type: ignore[attr-defined]
+            error_callback(OSError("NAS unreachable"))  # type: ignore[operator]
+
+        monkeypatch.setattr(liveview, "run_async", failing_fetch)
+        slot = _slot(camera=SimpleNamespace(id=1, name="cam", status=CameraStatus.ENABLED))
+        slot._stream_lost = True
+        page = SimpleNamespace(
+            app=SimpleNamespace(api=object(), config=self._config()),
+            _slots=[slot],
+            _timeline_paused=False,
+            _on_stream_url=lambda result: None,
+        )
+        page._apply_dewarp = lambda s, c: LiveView._apply_dewarp(page, s, c)  # type: ignore[arg-type]
+        LiveView._start_stream(page, 0, slot.camera)  # type: ignore[arg-type]
+        assert slot.player.called("set_dewarp") == []
+
+    def test_once_the_card_is_stopped(self) -> None:
+        order: list[object] = []
+        slot = _slot(camera=SimpleNamespace(id=1, name="cam", status=CameraStatus.ENABLED))
+        slot.get_visible = lambda: True  # type: ignore[method-assign]
+        slot.stop_stream = lambda: order.append("stop")  # type: ignore[method-assign]
+        slot.player = SimpleNamespace(set_dewarp=lambda *args: order.append(args))
+        page = SimpleNamespace(
+            app=SimpleNamespace(config=self._config()),
+            _slots=[slot],
+            _streams_paused=False,
+            _start_ws_bridge=lambda s, url: order.append("bridge"),
+        )
+        page._apply_dewarp = lambda s, c: LiveView._apply_dewarp(page, s, c)  # type: ignore[arg-type]
+        LiveView._on_stream_url(page, (0, 1, "wss://nas/live"))  # type: ignore[arg-type]
+        assert order == ["stop", (MODE_PTZ, Lens(), "ceiling"), "bridge"]
+
+
 class TestResumedPosition:
     """Only the Play button puts a bridge's resumed position on the
     timeline. The other paths settle the position themselves, and a

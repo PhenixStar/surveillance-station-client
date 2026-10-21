@@ -3178,7 +3178,6 @@ class LiveView(Gtk.Box):
         slot.player.set_paused(self._timeline_paused)
 
         api = self.app.api
-        self._apply_dewarp(slot, camera)
         protocol = self.app.config.camera_protocols.get(camera.id, "auto")
         override = self.app.config.camera_overrides.get(camera.id, "")
         camera_stream_profile = self.app.config.camera_live_view_stream_profiles.get(
@@ -3218,6 +3217,10 @@ class LiveView(Gtk.Box):
         if slot.get_visible() and slot.camera and slot.camera.id == cam_id:
             log.info("Starting stream in slot %d: %s", slot_idx, url)
             slot.stop_stream()
+            # Not before the URL fetch: a retried slot still shows the
+            # offline or stream lost card until here, and keeps it if the
+            # fetch fails.
+            self._apply_dewarp(slot, slot.camera)
             # Only now is a stream really starting. Holding the flag until
             # here keeps the retry armed when the URL fetch itself fails,
             # which is the likeliest outcome when the NAS being unreachable
