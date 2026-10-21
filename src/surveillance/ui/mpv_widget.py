@@ -387,6 +387,8 @@ class MpvGLArea(Gtk.GLArea):
         # Set once the dewarp has failed on this widget's GL, which will
         # not do better on the next stream (see _render_dewarped).
         self._dewarp_failed = False
+        # mpv's dwidth/dheight as last reported (_on_video_size).
+        self._video_size: dict[str, int] = {"dwidth": 0, "dheight": 0}
 
         self.set_auto_render(False)
         self.set_hexpand(True)
@@ -454,6 +456,8 @@ class MpvGLArea(Gtk.GLArea):
             }
             options.update(extra_opts)
             self._mpv = mpv.MPV(*extra_flags, log_handler=self._mpv_log, **options)
+            self._mpv.observe_property("dwidth", self._on_video_size)
+            self._mpv.observe_property("dheight", self._on_video_size)
 
             version = str(getattr(self._mpv, "mpv_version", ""))
             if _mpv_leaks_vsync_fences(version):
@@ -564,8 +568,8 @@ class MpvGLArea(Gtk.GLArea):
         try:
             if self._fisheye is None:
                 self._fisheye = FisheyeRenderer(bool(gl_context.get_use_es()))
-            src_w = int(self._mpv.dwidth or 0) if self._mpv else 0
-            src_h = int(self._mpv.dheight or 0) if self._mpv else 0
+            src_w = self._video_size["dwidth"]
+            src_h = self._video_size["dheight"]
             if src_w <= 0 or src_h <= 0:
                 src_w, src_h = width, height
             limit = 4096
@@ -584,6 +588,16 @@ class MpvGLArea(Gtk.GLArea):
             glBindFramebuffer(GL_FRAMEBUFFER, fbo)
             return False
         return True
+
+    def _on_video_size(self, name: str, value: Any) -> None:
+        """dwidth/dheight observer, called on mpv's event thread.
+
+        _render_dewarped needs the size on every frame, on the render
+        thread, where reading the property waits on the mpv core: 3 ms a
+        frame on average and up to 0.2 s at a time, measured with libmpv
+        0.41 on a Raspberry Pi.
+        """
+        self._video_size[name] = int(value or 0)
 
     def set_dewarp(self, mode: str, lens: Lens | None = None) -> None:
         """Show this widget's video dewarped (ui.fisheye MODE_*), or as

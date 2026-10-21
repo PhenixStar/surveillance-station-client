@@ -87,6 +87,9 @@ class _FakeMPV:
     def play(self, url: str) -> None:
         self.played.append(url)
 
+    def observe_property(self, name: str, handler: Any) -> None:
+        pass
+
 
 def _constructed(
     monkeypatch: pytest.MonkeyPatch, env: str | None, url: str | None = None
@@ -139,6 +142,9 @@ def _constructed(
             pass
 
         def _mpv_update_cb(self) -> None:
+            pass
+
+        def _on_video_size(self, name: str, value: Any) -> None:
             pass
 
     widget = _Widget()
