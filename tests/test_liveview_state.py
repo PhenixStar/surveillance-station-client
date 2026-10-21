@@ -37,6 +37,7 @@ import pytest
 
 from surveillance.api.models import CameraStatus
 from surveillance.ui import liveview
+from surveillance.ui.fisheye import MODE_PTZ, Lens
 from surveillance.ui.liveview import CameraSlot, LiveView
 
 
@@ -806,10 +807,43 @@ class TestLostHistorySlot:
             _timeline_speed="1",
             _timeline_reverse=False,
             _start_bridge=lambda slot, bridge: None,
+            _apply_dewarp=lambda slot, camera: None,
         )
         recording = SimpleNamespace(camera_id=1)
         LiveView._enter_history_mode(page, slot, recording, 1_700_000_500)  # type: ignore[arg-type]
         assert slot._stream_lost is False
+
+    def test_its_history_stream_gets_the_camera_dewarp(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The stream lost card turned the dewarp off, and a History
+        retry, a camera picked into a History slot or a Camera Settings
+        Apply in History all start here rather than in _start_stream."""
+
+        class _Bridge:
+            current_history_position = 1_700_000_500
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+        monkeypatch.setattr(liveview, "WebSocketBridge", _Bridge)
+        monkeypatch.setattr(liveview, "get_history_view_path", lambda api: "wss://nas/history")
+        slot = self._lost_slot()
+        page = SimpleNamespace(
+            app=SimpleNamespace(
+                api=SimpleNamespace(profile=SimpleNamespace(verify_ssl=False), sid="sid"),
+                config=SimpleNamespace(
+                    camera_dewarp={1: MODE_PTZ}, camera_fisheye_lens={1: "0.5,0.5,0.45"}
+                ),
+            ),
+            _timeline_speed="1",
+            _timeline_reverse=False,
+            _start_bridge=lambda slot, bridge: None,
+        )
+        page._apply_dewarp = lambda s, c: LiveView._apply_dewarp(page, s, c)  # type: ignore[arg-type]
+        recording = SimpleNamespace(camera_id=1)
+        LiveView._enter_history_mode(page, slot, recording, 1_700_000_500)  # type: ignore[arg-type]
+        assert slot.player.called("set_dewarp") == [(MODE_PTZ, Lens(radius=0.45))]
 
 
 class TestLeavingThePageDropsLookups:

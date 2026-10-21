@@ -3178,11 +3178,7 @@ class LiveView(Gtk.Box):
         slot.player.set_paused(self._timeline_paused)
 
         api = self.app.api
-        # Fisheye dewarp follows the camera, set before the first frame.
-        slot.player.set_dewarp(
-            self.app.config.camera_dewarp.get(camera.id, ""),
-            parse_lens(self.app.config.camera_fisheye_lens.get(camera.id, "")),
-        )
+        self._apply_dewarp(slot, camera)
         protocol = self.app.config.camera_protocols.get(camera.id, "auto")
         override = self.app.config.camera_overrides.get(camera.id, "")
         camera_stream_profile = self.app.config.camera_live_view_stream_profiles.get(
@@ -3243,6 +3239,14 @@ class LiveView(Gtk.Box):
         bridge = WebSocketBridge(url, verify_ssl, sid, label=label)
         self._start_bridge(slot, bridge)
 
+    def _apply_dewarp(self, slot: CameraSlot, camera: Camera) -> None:
+        """Set *slot*'s fisheye dewarp from *camera*'s settings, before the
+        first frame of a stream starting there, live or History."""
+        slot.player.set_dewarp(
+            self.app.config.camera_dewarp.get(camera.id, ""),
+            parse_lens(self.app.config.camera_fisheye_lens.get(camera.id, "")),
+        )
+
     def _enter_history_mode(self, slot: CameraSlot, recording: Recording, target_unix: int) -> int:
         """Switch *slot* into History mode, playing *recording* from
         *target_unix* (see ws_bridge.py's module docstring for the wire
@@ -3262,6 +3266,11 @@ class LiveView(Gtk.Box):
         if not self.app.api:
             return target_unix
         slot.stop_stream()
+        # Picked into a History slot, back from the stream lost card or
+        # restarted by Camera Settings, the camera starts here, not in
+        # _start_stream.
+        if slot.camera:
+            self._apply_dewarp(slot, slot.camera)
         # A stream really starts here, as in _on_stream_url, so a slot
         # retried after a give-up stops being one. Left set, every camera
         # poll retried it again, re-seeking a healthy bridge.
