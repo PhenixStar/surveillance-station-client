@@ -833,7 +833,9 @@ class TestLostHistorySlot:
             app=SimpleNamespace(
                 api=SimpleNamespace(profile=SimpleNamespace(verify_ssl=False), sid="sid"),
                 config=SimpleNamespace(
-                    camera_dewarp={1: MODE_PTZ}, camera_fisheye_lens={1: "0.5,0.5,0.45"}
+                    camera_dewarp={1: MODE_PTZ},
+                    camera_fisheye_lens={1: "0.5,0.5,0.45"},
+                    camera_fisheye_mount={},
                 ),
             ),
             _timeline_speed="1",
@@ -843,7 +845,7 @@ class TestLostHistorySlot:
         page._apply_dewarp = lambda s, c: LiveView._apply_dewarp(page, s, c)  # type: ignore[arg-type]
         recording = SimpleNamespace(camera_id=1)
         LiveView._enter_history_mode(page, slot, recording, 1_700_000_500)  # type: ignore[arg-type]
-        assert slot.player.called("set_dewarp") == [(MODE_PTZ, Lens(radius=0.45))]
+        assert slot.player.called("set_dewarp") == [(MODE_PTZ, Lens(radius=0.45), "ceiling")]
 
 
 class TestLeavingThePageDropsLookups:

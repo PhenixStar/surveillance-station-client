@@ -5,6 +5,8 @@ import pytest
 from surveillance.ui.fisheye import (
     MODE_PANORAMA,
     MODE_PTZ,
+    MOUNT_CEILING,
+    MOUNT_WALL,
     PTZ_DEFAULT_FOV,
     PTZ_DEFAULT_TILT,
     PTZ_FOV_MAX,
@@ -81,6 +83,9 @@ def test_dewarp_settings_are_kept_per_profile() -> None:
     assert state["camera_fisheye_lens"] == {23: "0.5,0.5,0.47,180"}
     tables = _profile_state_to(state)
     assert tables["camera_dewarp"] == {"23": "ptz"}
+    state = _profile_state_from({"camera_fisheye_mount": {"23": "wall"}})
+    assert state["camera_fisheye_mount"] == {23: "wall"}
+    assert _profile_state_to(state)["camera_fisheye_mount"] == {"23": "wall"}
 
 
 class _Player:
@@ -132,9 +137,13 @@ def test_camera_dewarp_reads_the_camera_entries() -> None:
 
     from surveillance.ui.fisheye import camera_dewarp
 
-    config = SimpleNamespace(camera_dewarp={7: MODE_PTZ}, camera_fisheye_lens={7: ",,0.45"})
-    assert camera_dewarp(config, 7) == (MODE_PTZ, Lens(radius=0.45))  # type: ignore[arg-type]
-    assert camera_dewarp(config, 8) == ("", Lens())  # type: ignore[arg-type]
+    config = SimpleNamespace(
+        camera_dewarp={7: MODE_PTZ},
+        camera_fisheye_lens={7: ",,0.45"},
+        camera_fisheye_mount={7: MOUNT_WALL},
+    )
+    assert camera_dewarp(config, 7) == (MODE_PTZ, Lens(radius=0.45), MOUNT_WALL)  # type: ignore[arg-type]
+    assert camera_dewarp(config, 8) == ("", Lens(), MOUNT_CEILING)  # type: ignore[arg-type]
 
 
 def test_the_recording_player_dewarps_its_camera(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -150,11 +159,68 @@ def test_the_recording_player_dewarps_its_camera(monkeypatch: pytest.MonkeyPatch
     dialog = SimpleNamespace(
         app=SimpleNamespace(
             api=object(),
-            config=SimpleNamespace(camera_dewarp={7: MODE_PANORAMA}, camera_fisheye_lens={}),
+            config=SimpleNamespace(
+                camera_dewarp={7: MODE_PANORAMA}, camera_fisheye_lens={}, camera_fisheye_mount={}
+            ),
         ),
         recording=SimpleNamespace(camera_id=7),
         player=SimpleNamespace(set_dewarp=lambda *args: calls.append(("dewarp", *args))),
         _on_stream_url=lambda url: calls.append(("play", url)),
     )
     PlayerDialog._start_playback(dialog)  # type: ignore[arg-type]
-    assert calls == [("dewarp", MODE_PANORAMA, Lens()), ("play", "https://nas/stream")]
+    assert calls == [
+        ("dewarp", MODE_PANORAMA, Lens(), MOUNT_CEILING),
+        ("play", "https://nas/stream"),
+    ]
+
+
+def test_wall_ptz_starts_level_and_stays_within_the_lens() -> None:
+    view = DewarpView(mode=MODE_PTZ, lens=Lens(fov=180.0), mount=MOUNT_WALL)
+    view.reset()
+    assert (view.pan, view.tilt) == (0.0, 0.0)
+    view.drag(-0.5, 0.25)  # content dragged left and down: look right and up
+    assert view.pan == 0.5 * PTZ_DEFAULT_FOV
+    assert view.tilt == 0.25 * PTZ_DEFAULT_FOV
+    view.drag(-10.0, -10.0)
+    assert (view.pan, view.tilt) == (90.0, -90.0)  # no wrap past the lens
+
+
+def test_wall_panorama_does_not_move() -> None:
+    view = DewarpView(mode=MODE_PANORAMA, mount=MOUNT_WALL)
+    view.drag(0.5, 0.3)
+    assert (view.pan, view.tilt) == (0.0, PTZ_DEFAULT_TILT)
+
+
+def test_set_dewarp_resets_the_view_on_a_mount_change() -> None:
+    from surveillance.ui.mpv_widget import MpvGLArea
+
+    player = _Player()
+    MpvGLArea.set_dewarp(player, MODE_PTZ)  # type: ignore[arg-type]
+    MpvGLArea.set_dewarp(player, MODE_PTZ, None, MOUNT_CEILING)  # type: ignore[arg-type]
+    assert player.resets == 1
+    MpvGLArea.set_dewarp(player, MODE_PTZ, None, MOUNT_WALL)  # type: ignore[arg-type]
+    assert (player._dewarp.mount, player.resets) == (MOUNT_WALL, 2)
+
+
+def test_camera_settings_keep_no_entry_for_the_defaults() -> None:
+    from types import SimpleNamespace
+
+    from surveillance.config import AppConfig
+    from surveillance.ui.camera_settings import CameraSettingsDialog
+    from surveillance.ui.fisheye import MODES, MOUNTS
+
+    selected = {"dewarp": list(MODES).index(MODE_PTZ), "mount": list(MOUNTS).index(MOUNT_WALL)}
+    config = AppConfig()
+    dialog = SimpleNamespace(
+        app=SimpleNamespace(config=config),
+        cam=SimpleNamespace(id=3),
+        _dewarp_modes=list(MODES),
+        _dewarp_dropdown=SimpleNamespace(get_selected=lambda: selected["dewarp"]),
+        _mounts=list(MOUNTS),
+        _mount_dropdown=SimpleNamespace(get_selected=lambda: selected["mount"]),
+    )
+    CameraSettingsDialog._save_fisheye(dialog)  # type: ignore[arg-type]
+    assert (config.camera_dewarp, config.camera_fisheye_mount) == ({3: MODE_PTZ}, {3: MOUNT_WALL})
+    selected.update(dewarp=0, mount=0)
+    CameraSettingsDialog._save_fisheye(dialog)  # type: ignore[arg-type]
+    assert (config.camera_dewarp, config.camera_fisheye_mount) == ({}, {})

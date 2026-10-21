@@ -44,7 +44,7 @@ gi.require_version("Gtk", "4.0")
 
 from gi.repository import GLib, Gtk  # type: ignore[import-untyped]
 
-from surveillance.ui.fisheye import DewarpView, FisheyeRenderer, Lens
+from surveillance.ui.fisheye import MOUNT_CEILING, DewarpView, FisheyeRenderer, Lens
 
 log = logging.getLogger(__name__)
 
@@ -599,19 +599,21 @@ class MpvGLArea(Gtk.GLArea):
         """
         self._video_size[name] = int(value or 0)
 
-    def set_dewarp(self, mode: str, lens: Lens | None = None) -> None:
-        """Show this widget's video dewarped (ui.fisheye MODE_*), or as
-        delivered with mode "". A change starts from the default view and
-        drops any flat zoom, which the dewarp's own zoom replaces; the
-        same mode and lens again keep both, so a restarted stream keeps
-        the view it had. Always as delivered once the dewarp failed here."""
+    def set_dewarp(self, mode: str, lens: Lens | None = None, mount: str = MOUNT_CEILING) -> None:
+        """Show this widget's video dewarped (ui.fisheye MODE_*, MOUNT_*),
+        or as delivered with mode "". A change starts from the default view
+        and drops any flat zoom, which the dewarp's own zoom replaces; the
+        same settings again keep both, so a restarted stream keeps the view
+        it had. Always as delivered once the dewarp failed here."""
         if self._dewarp_failed:
             mode = ""
         lens = lens or Lens()
-        if mode == self._dewarp.mode and lens == self._dewarp.lens:
+        dewarp = self._dewarp
+        if (mode, lens, mount) == (dewarp.mode, dewarp.lens, dewarp.mount):
             return
-        self._dewarp.mode = mode
-        self._dewarp.lens = lens
+        dewarp.mode = mode
+        dewarp.lens = lens
+        dewarp.mount = mount
         self.reset_zoom()
         self.queue_render()
 

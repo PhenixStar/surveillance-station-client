@@ -21,14 +21,20 @@ grid menu after a confirmation prompt.
 Scroll the mouse wheel over a slot to zoom in, centered on the cursor;
 click and drag to pan. Zoom resets when switching layouts or leaving the
 page.
-A fisheye camera looking straight down can be shown dewarped, chosen with
+A fisheye camera can be shown dewarped, chosen with
 .B Fisheye dewarp
-in its Camera Settings:
+in its Camera Settings, with
+.B Fisheye mount
+for how it hangs.
+On a ceiling, looking straight down,
 .I Panorama
 unrolls the circle into two stacked 180 degree strips with the rim on top,
-turned by dragging sideways;
+turned by dragging sideways; on a wall, looking straight out, it is one
+strip as wide as the lens sees with the horizon across the middle.
 .I Virtual PTZ
-shows a flat view steered by dragging and zoomed with the mouse wheel.
+shows a flat view steered by dragging and zoomed with the mouse wheel,
+turning all the way round on a ceiling and as far as the lens sees on a
+wall.
 Both apply to live and recorded video in Live View, where they keep their
 view across a Reload and reset like the zoom, and to the playback window
 recordings open in.
@@ -390,8 +396,12 @@ section selects a fisheye dewarp per camera,
 .B panorama
 or
 .BR ptz ,
-for a lens looking straight down; a camera with no entry is shown as
-delivered.
+and
+.B camera_fisheye_mount
+how it hangs,
+.B wall
+for a lens looking straight out; a camera with no entry is shown as
+delivered, and one with no mount is on a ceiling, looking down.
 .PP
 These settings can be configured from
 .B Camera Settings

@@ -46,6 +46,7 @@ from surveillance.services.live import (
     StreamProfile,
     app_stream_profile,
 )
+from surveillance.ui.fisheye import MODE_OFF, MOUNT_CEILING, MOUNTS
 from surveillance.ui.fisheye import MODES as DEWARP_MODES
 
 if TYPE_CHECKING:
@@ -69,6 +70,14 @@ def validate_rtsp_url(url: str) -> str | None:
     if not parsed.hostname:
         return "URL must contain a hostname."
     return None
+
+
+def _store(table: dict[int, str], cam_id: int, value: str, default: str) -> None:
+    """Set *cam_id*'s entry in *table* to *value*, or drop it for *default*."""
+    if value == default:
+        table.pop(cam_id, None)
+    else:
+        table[cam_id] = value
 
 
 class CameraSettingsDialog(Gtk.Window):
@@ -177,8 +186,8 @@ class CameraSettingsDialog(Gtk.Window):
         self._dewarp_modes = list(DEWARP_MODES)
         self._dewarp_dropdown = Gtk.DropDown.new_from_strings(list(DEWARP_MODES.values()))
         self._dewarp_dropdown.set_tooltip_text(
-            "For a fisheye camera looking straight down (ceiling mount). "
-            "Panorama unrolls the circle into two 180° strips; Virtual PTZ "
+            "For a fisheye camera. Panorama unrolls the circle, into two "
+            "180° strips on a ceiling or one strip on a wall; Virtual PTZ "
             "shows a flat view you steer by dragging and zoom with the "
             "scroll wheel. Snapshots keep the original fisheye picture."
         )
@@ -187,6 +196,19 @@ class CameraSettingsDialog(Gtk.Window):
             self._dewarp_dropdown.set_selected(self._dewarp_modes.index(current_dewarp))
         dewarp_row.append(self._dewarp_dropdown)
         box.append(dewarp_row)
+
+        mount_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        mount_label = Gtk.Label(label="Fisheye mount")
+        mount_label.set_xalign(0)
+        mount_label.set_hexpand(True)
+        mount_row.append(mount_label)
+        self._mounts = list(MOUNTS)
+        self._mount_dropdown = Gtk.DropDown.new_from_strings(list(MOUNTS.values()))
+        current_mount = self.app.config.camera_fisheye_mount.get(cam.id, MOUNT_CEILING)
+        if current_mount in self._mounts:
+            self._mount_dropdown.set_selected(self._mounts.index(current_mount))
+        mount_row.append(self._mount_dropdown)
+        box.append(mount_row)
 
         # Buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -237,6 +259,15 @@ class CameraSettingsDialog(Gtk.Window):
         self._profile_note.set_label(note)
         self._profile_note.set_visible(bool(note))
 
+    def _save_fisheye(self) -> None:
+        """Store the fisheye choices, leaving no entry for a default."""
+        config = self.app.config
+        cam_id = self.cam.id
+        dewarp = self._dewarp_modes[self._dewarp_dropdown.get_selected()]
+        _store(config.camera_dewarp, cam_id, dewarp, MODE_OFF)
+        mount = self._mounts[self._mount_dropdown.get_selected()]
+        _store(config.camera_fisheye_mount, cam_id, mount, MOUNT_CEILING)
+
     def _on_apply(self, _btn: Gtk.Button) -> None:
         cam = self.cam
         config = self.app.config
@@ -276,13 +307,7 @@ class CameraSettingsDialog(Gtk.Window):
         else:
             config.camera_live_view_stream_profiles[cam.id] = str(profile)
 
-        # Save fisheye dewarp
-        dewarp = self._dewarp_modes[self._dewarp_dropdown.get_selected()]
-        if dewarp:
-            config.camera_dewarp[cam.id] = dewarp
-        else:
-            config.camera_dewarp.pop(cam.id, None)
-
+        self._save_fisheye()
         save_config_now(config)
         self.close()
 

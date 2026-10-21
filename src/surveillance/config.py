@@ -154,9 +154,11 @@ class AppConfig:
     camera_volume: dict[int, int] = field(default_factory=dict)
     # Camera ID -> fisheye dewarp mode ("panorama", "ptz"); a camera with
     # no entry is shown as delivered. Lens calibration, when the defaults
-    # don't fit, is "center_x,center_y,radius,lens_fov" (ui.fisheye).
+    # don't fit, is "center_x,center_y,radius,lens_fov", and the mount
+    # "wall" for a lens looking out rather than down (ui.fisheye).
     camera_dewarp: dict[int, str] = field(default_factory=dict)
     camera_fisheye_lens: dict[int, str] = field(default_factory=dict)
+    camera_fisheye_mount: dict[int, str] = field(default_factory=dict)
     camera_muted: dict[int, bool] = field(default_factory=dict)
     search_camera_ids: list[int] = field(default_factory=list)
     search_from_time: str = ""
@@ -246,6 +248,7 @@ PROFILE_STATE_FIELDS = (
     "camera_muted",
     "camera_dewarp",
     "camera_fisheye_lens",
+    "camera_fisheye_mount",
     "legacy_event_type_history",
     "search_camera_ids",
     "events_search_camera_ids",
@@ -362,6 +365,7 @@ def _profile_state_from(data: dict[str, Any]) -> dict[str, Any]:
         "camera_muted": _int_keyed(data.get("camera_muted"), bool),
         "camera_dewarp": _int_keyed(data.get("camera_dewarp"), str),
         "camera_fisheye_lens": _int_keyed(data.get("camera_fisheye_lens"), str),
+        "camera_fisheye_mount": _int_keyed(data.get("camera_fisheye_mount"), str),
         "legacy_event_type_history": {
             # The current key wins per camera over the old one, as the
             # one saving writes.
@@ -388,6 +392,7 @@ def _profile_state_to(state: dict[str, Any]) -> dict[str, Any]:
         "camera_muted": {str(k): v for k, v in state["camera_muted"].items()},
         "camera_dewarp": {str(k): v for k, v in state["camera_dewarp"].items()},
         "camera_fisheye_lens": {str(k): v for k, v in state["camera_fisheye_lens"].items()},
+        "camera_fisheye_mount": {str(k): v for k, v in state["camera_fisheye_mount"].items()},
         "legacy_event_type_history": {
             str(cam_id): {
                 "types": [list(pair) for pair in hist.types],

@@ -32,11 +32,13 @@ video's own size, then draws the widget through a fragment shader that
 maps every output pixel to a direction and that direction to a point on
 the circle (equidistant lens, r = radius * theta / (lens_fov / 2)).
 
-Two views, both for a lens looking straight down (ceiling mount):
+Two views, for a lens looking straight down (ceiling mount) or straight
+out from a wall:
 
-- panorama: the ring unrolled into two stacked 180 degree strips, the
-  rim (horizon) at the top of each, so people stand upright and the
-  tile keeps the camera's own shape;
+- panorama: on the ceiling, the ring unrolled into two stacked 180 degree
+  strips, the rim (horizon) at the top of each, so people stand upright
+  and the tile keeps the camera's own shape; on a wall, one strip as wide
+  as the lens sees, the horizon across its middle;
 - ptz: a virtual pan/tilt/zoom camera, steered with the same drag and
   scroll that otherwise pan and zoom the flat picture.
 
@@ -65,14 +67,22 @@ MODE_PANORAMA = "panorama"
 MODE_PTZ = "ptz"
 MODES = {
     MODE_OFF: "Off",
-    MODE_PANORAMA: "Panorama (two 180° strips)",
+    MODE_PANORAMA: "Panorama",
     MODE_PTZ: "Virtual PTZ (drag to look around, scroll to zoom)",
 }
+MOUNT_CEILING = "ceiling"
+MOUNT_WALL = "wall"
+MOUNTS = {
+    MOUNT_CEILING: "Ceiling (looking down)",
+    MOUNT_WALL: "Wall (looking out)",
+}
 
-# Virtual PTZ limits and starting view (degrees).
+# Virtual PTZ limits and starting view (degrees). The tilt is from the
+# optical axis, so a wall camera starts looking straight out.
 PTZ_FOV_MIN = 20.0
 PTZ_FOV_MAX = 150.0
 PTZ_DEFAULT_TILT = 45.0
+PTZ_DEFAULT_TILT_WALL = 0.0
 PTZ_DEFAULT_FOV = 80.0
 # How far in from the rim the panorama strips reach (angle from the
 # optical axis at their bottom edge): the middle of the circle is the
@@ -112,12 +122,13 @@ def parse_lens(text: str) -> Lens:
     return Lens(cx, cy, radius, fov)
 
 
-def camera_dewarp(config: AppConfig, camera_id: int) -> tuple[str, Lens]:
-    """The dewarp mode and lens *camera_id* is set to, as
+def camera_dewarp(config: AppConfig, camera_id: int) -> tuple[str, Lens, str]:
+    """The dewarp mode, lens and mount *camera_id* is set to, as
     MpvGLArea.set_dewarp takes them."""
     return (
         config.camera_dewarp.get(camera_id, MODE_OFF),
         parse_lens(config.camera_fisheye_lens.get(camera_id, "")),
+        config.camera_fisheye_mount.get(camera_id, MOUNT_CEILING),
     )
 
 
@@ -127,6 +138,7 @@ class DewarpView:
 
     mode: str = MODE_OFF
     lens: Lens = field(default_factory=Lens)
+    mount: str = MOUNT_CEILING
     pan: float = 0.0
     tilt: float = PTZ_DEFAULT_TILT
     fov: float = PTZ_DEFAULT_FOV
@@ -135,9 +147,13 @@ class DewarpView:
     def active(self) -> bool:
         return self.mode in (MODE_PANORAMA, MODE_PTZ)
 
+    @property
+    def wall(self) -> bool:
+        return self.mount == MOUNT_WALL
+
     def reset(self) -> None:
         self.pan = 0.0
-        self.tilt = PTZ_DEFAULT_TILT
+        self.tilt = PTZ_DEFAULT_TILT_WALL if self.wall else PTZ_DEFAULT_TILT
         self.fov = PTZ_DEFAULT_FOV
 
     def zoom(self, delta: float) -> None:
@@ -147,11 +163,16 @@ class DewarpView:
 
     def drag(self, dx: float, dy: float) -> None:
         """Drag by fractions of the widget size, content following the
-        pointer like the flat picture's grab-and-drag."""
-        if self.mode == MODE_PTZ:
+        pointer like the flat picture's grab-and-drag. A wall camera's
+        panorama already shows all it sees, so it does not move."""
+        half = self.lens.fov / 2.0
+        if self.mode == MODE_PTZ and self.wall:
+            self.pan = min(half, max(-half, self.pan - dx * self.fov))
+            self.tilt = min(half, max(-half, self.tilt + dy * self.fov))
+        elif self.mode == MODE_PTZ:
             self.pan = (self.pan - dx * self.fov) % 360.0
-            self.tilt = min(self.lens.fov / 2.0, max(0.0, self.tilt + dy * self.fov))
-        elif self.mode == MODE_PANORAMA:
+            self.tilt = min(half, max(0.0, self.tilt + dy * self.fov))
+        elif self.mode == MODE_PANORAMA and not self.wall:
             self.pan = (self.pan - dx * 180.0) % 360.0
 
 
@@ -170,12 +191,13 @@ in vec2 v_uv;
 out vec4 frag;
 uniform sampler2D u_tex;
 uniform int u_mode;           // 1 panorama, 2 ptz
+uniform int u_wall;           // 1 for a lens looking out from a wall
 uniform vec2 u_center;        // circle centre, fractions of width/height
 uniform float u_radius;       // circle radius, fraction of height
 uniform float u_src_aspect;   // source width / height
 uniform float u_half_fov;     // lens half field of view (radians)
 uniform float u_pan;          // radians
-uniform float u_tilt;         // radians, 0 = straight down the axis
+uniform float u_tilt;         // radians from the axis, positive up
 uniform float u_fov;          // ptz field of view (radians)
 uniform float u_out_aspect;   // output width / height
 uniform float u_theta_min;    // panorama strip bottom (radians)
@@ -202,7 +224,19 @@ void main() {
         float ct = cos(u_tilt), st = sin(u_tilt);
         r = vec3(r.x, r.y * ct - r.z * st, r.y * st + r.z * ct);
         float cp = cos(u_pan), sp = sin(u_pan);
-        d = vec3(r.x * cp - r.y * sp, r.x * sp + r.y * cp, r.z);
+        if (u_wall == 1) {
+            // Pan about the vertical, the frame's y axis.
+            d = vec3(r.x * cp + r.z * sp, r.y, r.z * cp - r.x * sp);
+        } else {
+            // Pan about the optical axis.
+            d = vec3(r.x * cp - r.y * sp, r.x * sp + r.y * cp, r.z);
+        }
+    } else if (u_wall == 1) {
+        // The lens's whole width across the strip, the horizon through
+        // its middle, the same angle per pixel both ways.
+        float lon = (o.x - 0.5) * 2.0 * u_half_fov;
+        float lat = (0.5 - o.y) * 2.0 * u_half_fov / u_out_aspect;
+        d = vec3(cos(lat) * sin(lon), -sin(lat), cos(lat) * cos(lon));
     } else {
         float lower = o.y >= 0.5 ? 1.0 : 0.0;
         float ly = (o.y - 0.5 * lower) * 2.0;
@@ -240,6 +274,7 @@ class FisheyeRenderer:
             for name in (
                 "u_tex",
                 "u_mode",
+                "u_wall",
                 "u_center",
                 "u_radius",
                 "u_src_aspect",
@@ -328,6 +363,7 @@ class FisheyeRenderer:
         lens = view.lens
         gl.glUniform1i(u["u_tex"], 0)
         gl.glUniform1i(u["u_mode"], 2 if view.mode == MODE_PTZ else 1)
+        gl.glUniform1i(u["u_wall"], 1 if view.wall else 0)
         gl.glUniform2f(u["u_center"], lens.center_x, lens.center_y)
         gl.glUniform1f(u["u_radius"], lens.radius)
         gl.glUniform1f(u["u_src_aspect"], src_w / src_h if src_h else 1.0)
