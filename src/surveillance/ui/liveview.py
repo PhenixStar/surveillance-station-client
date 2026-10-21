@@ -3151,7 +3151,9 @@ class LiveView(Gtk.Box):
             slot.set_history_mode(False)
             self._set_history_position(slot, None)
             self._sync_history_active()
-            slot.player.set_dewarp("")  # the placeholder card is never zoomed or dewarped
+            # The placeholder card is never zoomed or dewarped.
+            slot.player.set_dewarp("")
+            slot.player.reset_zoom()
             slot.set_status("offline")
             slot.player.play(OFFLINE_PLACEHOLDER_URL)
             return
@@ -3489,7 +3491,9 @@ class LiveView(Gtk.Box):
         # camera-to-camera switch), just targeting a local synthetic
         # stream instead of the dead network one, so it can't wedge.
         slot.stop_stream()
-        slot.player.set_dewarp("")  # the placeholder card is never zoomed or dewarped
+        # The placeholder card is never zoomed or dewarped.
+        slot.player.set_dewarp("")
+        slot.player.reset_zoom()
         slot.set_status("stream lost")
         slot.player.play(OFFLINE_PLACEHOLDER_URL)
 

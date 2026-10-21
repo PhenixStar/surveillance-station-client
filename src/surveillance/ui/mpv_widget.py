@@ -583,11 +583,15 @@ class MpvGLArea(Gtk.GLArea):
 
     def set_dewarp(self, mode: str, lens: Lens | None = None) -> None:
         """Show this widget's video dewarped (ui.fisheye MODE_*), or as
-        delivered with mode "". Starts from the default view and drops any
-        flat zoom, which the dewarp's own zoom replaces."""
+        delivered with mode "". A change starts from the default view and
+        drops any flat zoom, which the dewarp's own zoom replaces; the
+        same mode and lens again keep both, so a restarted stream keeps
+        the view it had."""
+        lens = lens or Lens()
+        if mode == self._dewarp.mode and lens == self._dewarp.lens:
+            return
         self._dewarp.mode = mode
-        self._dewarp.lens = lens or Lens()
-        self._dewarp.reset()
+        self._dewarp.lens = lens
         self.reset_zoom()
         self.queue_render()
 

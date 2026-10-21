@@ -79,3 +79,35 @@ def test_dewarp_settings_are_kept_per_profile() -> None:
     assert state["camera_fisheye_lens"] == {23: "0.5,0.5,0.47,180"}
     tables = _profile_state_to(state)
     assert tables["camera_dewarp"] == {"23": "ptz"}
+
+
+class _Player:
+    """What MpvGLArea.set_dewarp touches on its widget."""
+
+    def __init__(self) -> None:
+        self._dewarp = DewarpView()
+        self.resets = 0
+
+    def reset_zoom(self) -> None:
+        self.resets += 1
+
+    def queue_render(self) -> None:
+        pass
+
+
+def test_set_dewarp_keeps_the_view_when_nothing_changes() -> None:
+    """A Reload or Camera Settings Apply restarts the stream and sets the
+    dewarp again; only a change drops the zoom and the steered view."""
+    from surveillance.ui.mpv_widget import MpvGLArea
+
+    player = _Player()
+    MpvGLArea.set_dewarp(player, "")  # type: ignore[arg-type]
+    assert player.resets == 0
+    MpvGLArea.set_dewarp(player, MODE_PTZ)  # type: ignore[arg-type]
+    assert (player._dewarp.mode, player.resets) == (MODE_PTZ, 1)
+    MpvGLArea.set_dewarp(player, MODE_PTZ, Lens())  # type: ignore[arg-type]
+    assert player.resets == 1
+    MpvGLArea.set_dewarp(player, MODE_PTZ, Lens(radius=0.45))  # type: ignore[arg-type]
+    assert player.resets == 2
+    MpvGLArea.set_dewarp(player, "")  # type: ignore[arg-type]
+    assert (player._dewarp.active, player.resets) == (False, 3)

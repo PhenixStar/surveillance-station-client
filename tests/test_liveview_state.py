@@ -462,6 +462,10 @@ class TestOfflineCard:
         assert slot.called("set_history_mode") == [(False,)]
         assert slot.player.called("play") == [(liveview.OFFLINE_PLACEHOLDER_URL,)]
         assert slot._stream_lost is False
+        # set_dewarp("") keeps a slot that was not dewarped as it is, so
+        # the card needs its own zoom reset.
+        assert slot.player.called("set_dewarp") == [("",)]
+        assert slot.player.called("reset_zoom") == [()]
 
     def test_history_active_ignores_a_slot_on_its_way_back_to_live(self) -> None:
         leaving = _slot(bridge=_bridge(history=True))
