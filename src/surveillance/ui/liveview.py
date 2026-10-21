@@ -68,6 +68,7 @@ from surveillance.services.recording import (
 )
 from surveillance.services.snapshot import download_snapshot, take_and_save_snapshot
 from surveillance.services.ws_bridge import MIN_HISTORY_DELTA_SECONDS, WebSocketBridge
+from surveillance.ui.fisheye import parse_lens
 from surveillance.ui.layouts import LAYOUT_VISIBLE, valid_layout
 from surveillance.ui.mpv_widget import MpvGLArea, attach_zoom_pan_controls
 from surveillance.ui.rtsp_health import RtspHealthMonitor
@@ -3178,8 +3179,6 @@ class LiveView(Gtk.Box):
 
         api = self.app.api
         # Fisheye dewarp follows the camera, set before the first frame.
-        from surveillance.ui.fisheye import parse_lens
-
         slot.player.set_dewarp(
             self.app.config.camera_dewarp.get(camera.id, ""),
             parse_lens(self.app.config.camera_fisheye_lens.get(camera.id, "")),
