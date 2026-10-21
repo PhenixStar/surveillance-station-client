@@ -46,6 +46,7 @@ from surveillance.services.live import (
     StreamProfile,
     app_stream_profile,
 )
+from surveillance.ui.fisheye import MODES as DEWARP_MODES
 
 if TYPE_CHECKING:
     from surveillance.app import SurveillanceApp
@@ -165,6 +166,28 @@ class CameraSettingsDialog(Gtk.Window):
         for proto_key, radio in self._radios.items():
             radio.connect("toggled", self._on_radio_toggled, proto_key)
 
+        box.append(Gtk.Separator())
+
+        # Fisheye dewarp, for a camera whose lens delivers one circle
+        dewarp_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        dewarp_label = Gtk.Label(label="Fisheye dewarp")
+        dewarp_label.set_xalign(0)
+        dewarp_label.set_hexpand(True)
+        dewarp_row.append(dewarp_label)
+        self._dewarp_modes = list(DEWARP_MODES)
+        self._dewarp_dropdown = Gtk.DropDown.new_from_strings(list(DEWARP_MODES.values()))
+        self._dewarp_dropdown.set_tooltip_text(
+            "For a fisheye camera looking straight down (ceiling mount). "
+            "Panorama unrolls the circle into two 180° strips; Virtual PTZ "
+            "shows a flat view you steer by dragging and zoom with the "
+            "scroll wheel. Snapshots keep the original fisheye picture."
+        )
+        current_dewarp = self.app.config.camera_dewarp.get(cam.id, "")
+        if current_dewarp in self._dewarp_modes:
+            self._dewarp_dropdown.set_selected(self._dewarp_modes.index(current_dewarp))
+        dewarp_row.append(self._dewarp_dropdown)
+        box.append(dewarp_row)
+
         # Buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         btn_box.set_halign(Gtk.Align.END)
@@ -252,6 +275,13 @@ class CameraSettingsDialog(Gtk.Window):
             config.camera_live_view_stream_profiles.pop(cam.id, None)
         else:
             config.camera_live_view_stream_profiles[cam.id] = str(profile)
+
+        # Save fisheye dewarp
+        dewarp = self._dewarp_modes[self._dewarp_dropdown.get_selected()]
+        if dewarp:
+            config.camera_dewarp[cam.id] = dewarp
+        else:
+            config.camera_dewarp.pop(cam.id, None)
 
         save_config_now(config)
         self.close()

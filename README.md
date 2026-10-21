@@ -34,6 +34,8 @@ A slot keeps its stream when a layout switch leaves its camera in the same posit
 Streams are muted by default; hover a slot to reveal a toolbar with mute/volume (remembered per camera) and a quick Snapshot button. Audio reaches the player over the RTSP-family protocols (`rtsp`, `rtsp_over_http`, `multicast`, `direct`), or over the default `auto`/`websocket` protocol when the camera's audio codec is PCMU or AAC (muxed in via ffmpeg); otherwise the mute button stays greyed out until the protocol is changed (or DSM reports a different codec) by right-clicking the camera in the sidebar. A camera with no audio track gets no mute button at all. A muxed camera that stops sending audio for three seconds while its video keeps arriving keeps playing without sound until its stream is restarted, rather than holding up its own video; its volume control greys out as soon as that happens. In History mode a gap is filled with silence instead, since DSM sends no audio at some playback speeds or in reverse. Sound returns automatically when DSM resumes sending audio at supported playback speeds. Cameras with a speaker also get a push-to-talk microphone button &mdash; tap to start talking, tap again to stop. Hardware-accelerated rendering via mpv + OpenGL. Works on X11 and Wayland. While a slot plays recorded video from close to the live edge, the client also re-asks DSM every few seconds how far that recording now runs, since one still being written grows after it was first looked up. The client sends a periodic keepalive to hold each WebSocket session open; if a session is ever interrupted anyway (a network blip, a NAS restart), it reconnects on the same pipe transparently, with no visible interruption. A camera the server reports as disabled or disconnected shows an "offline" placeholder instead of freezing, and a WebSocket or RTSP stream that stops responding mid-session shows "stream lost" ("attempting reconnect" while retrying) &mdash; both recover automatically and restore the real feed as soon as the camera is reachable again, with no action needed, and a slot that was showing recorded video comes back to the same moment rather than jumping to live.
 
 POS receipts from Surveillance Station Transactions appear over the camera each POS device is paired with: every new receipt is drawn at the top-left of every Live View slot showing that camera, live only, and disappears after a set time. Settings &rarr; POS receipt overlay turns it on or off and sets the text size, the maximum lines (a longer receipt keeps its header and total and folds the items between) and how long a receipt stays. While no paired camera is on screen, only the pairing is read, every five minutes, and the overlay switches itself off when the NAS has no Transactions add-on or the account lacks the Transactions privilege.
+
+A fisheye camera looking straight down can be shown dewarped: pick **Fisheye dewarp** in its Camera Settings. *Panorama* unrolls the circle into two stacked 180&deg; strips with the rim on top, so people stand upright and the slot keeps the camera's shape; *Virtual PTZ* shows a flat view you look around in by dragging and zoom with the scroll wheel. It runs on the GPU after decoding, so hardware decoding stays on, and saved snapshots keep the original fisheye picture. A lens that is not a centred full circle of 180&deg; can be calibrated in `config.toml` with `camera_fisheye_lens` (`"center_x,center_y,radius,fov"`, fractions of the frame, radius of its height).
 </details>
 <details>
 <summary><b>Timeline</b></summary>
@@ -746,7 +748,7 @@ surveillance-station-client/
 │   │   ├── login.py                     login dialog
 │   │   ├── headerbar.py                 header bar controls
 │   │   ├── sidebar.py                   camera list sidebar
-│   │   ├── camera_settings.py           per-camera settings dialog (protocol, direct URL, stream profile)
+│   │   ├── camera_settings.py           per-camera settings dialog (protocol, direct URL, stream profile, fisheye dewarp)
 │   │   ├── liveview.py                  live stream grid
 │   │   ├── layouts.py                   grid layout definitions
 │   │   ├── timeline.py                  Live View timeline strip
@@ -754,6 +756,7 @@ surveillance-station-client/
 │   │   ├── event_type_filter.py         Filter-events popover
 │   │   ├── slot_toolbar.py              per-slot hover toolbar (audio, PTT, PTZ, snapshot)
 │   │   ├── mpv_widget.py                GLArea + mpv render
+│   │   ├── fisheye.py                   fisheye dewarp (panorama, virtual PTZ) shader and view state
 │   │   ├── rtsp_health.py               RTSP stream stall/health monitor
 │   │   ├── recordings.py                recording browser
 │   │   ├── advanced_search.py           advanced search dialog (shared by Recordings/Snapshots/Events)
@@ -782,6 +785,7 @@ surveillance-station-client/
     ├── test_liveview_state.py
     ├── test_logging.py
     ├── test_login_dialog.py
+    ├── test_fisheye.py
     ├── test_models.py
     ├── test_mpv_env_options.py
     ├── test_mpv_fence_workaround.py
