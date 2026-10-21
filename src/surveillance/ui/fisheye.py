@@ -243,19 +243,26 @@ class FisheyeRenderer:
         gl = self._gl
         program = gl.glCreateProgram()
         shaders = []
+        error = ""
         for kind, source in ((gl.GL_VERTEX_SHADER, vertex), (gl.GL_FRAGMENT_SHADER, fragment)):
             shader = gl.glCreateShader(kind)
+            shaders.append(shader)
             gl.glShaderSource(shader, source)
             gl.glCompileShader(shader)
             if not gl.glGetShaderiv(shader, gl.GL_COMPILE_STATUS):
-                raise RuntimeError(f"fisheye shader: {gl.glGetShaderInfoLog(shader)!r}")
+                error = f"fisheye shader: {gl.glGetShaderInfoLog(shader)!r}"
+                break
             gl.glAttachShader(program, shader)
-            shaders.append(shader)
-        gl.glLinkProgram(program)
+        else:
+            gl.glLinkProgram(program)
+            if not gl.glGetProgramiv(program, gl.GL_LINK_STATUS):
+                error = f"fisheye program: {gl.glGetProgramInfoLog(program)!r}"
+        # Attached ones go with the program, the rest right away.
         for shader in shaders:
             gl.glDeleteShader(shader)
-        if not gl.glGetProgramiv(program, gl.GL_LINK_STATUS):
-            raise RuntimeError(f"fisheye program: {gl.glGetProgramInfoLog(program)!r}")
+        if error:
+            gl.glDeleteProgram(program)
+            raise RuntimeError(error)
         return int(program)
 
     def target(self, width: int, height: int) -> int:
