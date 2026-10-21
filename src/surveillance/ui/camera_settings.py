@@ -46,8 +46,16 @@ from surveillance.services.live import (
     StreamProfile,
     app_stream_profile,
 )
-from surveillance.ui.fisheye import MODE_OFF, MOUNT_CEILING, MOUNTS
+from surveillance.ui.fisheye import (
+    MODE_OFF,
+    MOUNT_CEILING,
+    MOUNTS,
+    Lens,
+    format_lens,
+    parse_lens,
+)
 from surveillance.ui.fisheye import MODES as DEWARP_MODES
+from surveillance.ui.lens_calibration import LensCalibrationDialog
 
 if TYPE_CHECKING:
     from surveillance.app import SurveillanceApp
@@ -210,6 +218,21 @@ class CameraSettingsDialog(Gtk.Window):
         mount_row.append(self._mount_dropdown)
         box.append(mount_row)
 
+        lens_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lens_label = Gtk.Label(label="Fisheye lens")
+        lens_label.set_xalign(0)
+        lens_label.set_hexpand(True)
+        lens_row.append(lens_label)
+        self._lens = parse_lens(self.app.config.camera_fisheye_lens.get(cam.id, ""))
+        calibrate_btn = Gtk.Button(label="Calibrate…")
+        calibrate_btn.set_tooltip_text(
+            "For a lens that is not a centred full circle of 180°: fit the "
+            "circle on the camera's picture."
+        )
+        calibrate_btn.connect("clicked", self._on_calibrate)
+        lens_row.append(calibrate_btn)
+        box.append(lens_row)
+
         # Buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         btn_box.set_halign(Gtk.Align.END)
@@ -267,6 +290,13 @@ class CameraSettingsDialog(Gtk.Window):
         _store(config.camera_dewarp, cam_id, dewarp, MODE_OFF)
         mount = self._mounts[self._mount_dropdown.get_selected()]
         _store(config.camera_fisheye_mount, cam_id, mount, MOUNT_CEILING)
+        _store(config.camera_fisheye_lens, cam_id, format_lens(self._lens), format_lens(Lens()))
+
+    def _on_calibrate(self, _btn: Gtk.Button) -> None:
+        LensCalibrationDialog(self, self.app, self.cam, self._lens, self._set_lens).present()
+
+    def _set_lens(self, lens: Lens) -> None:
+        self._lens = lens
 
     def _on_apply(self, _btn: Gtk.Button) -> None:
         cam = self.cam

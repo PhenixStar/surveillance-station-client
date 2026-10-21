@@ -90,6 +90,12 @@ PTZ_DEFAULT_FOV = 80.0
 PANORAMA_THETA_MIN = 15.0
 
 
+# What parse_lens accepts, and what the calibration dialog offers.
+LENS_RADIUS_MAX = 2.0
+LENS_FOV_MIN = 10.0
+LENS_FOV_MAX = 360.0
+
+
 @dataclass(frozen=True)
 class Lens:
     """Where the image circle sits in the frame and how wide the lens is.
@@ -115,11 +121,17 @@ def parse_lens(text: str) -> Lens:
         with contextlib.suppress(ValueError):
             values[i] = float(part)
     cx, cy, radius, fov = values
-    if not (0.0 < radius <= 2.0):
+    if not (0.0 < radius <= LENS_RADIUS_MAX):
         radius = default.radius
-    if not (10.0 <= fov <= 360.0):
+    if not (LENS_FOV_MIN <= fov <= LENS_FOV_MAX):
         fov = default.fov
     return Lens(cx, cy, radius, fov)
+
+
+def format_lens(lens: Lens) -> str:
+    """*lens* as parse_lens reads it, to four decimals."""
+    values = (lens.center_x, lens.center_y, lens.radius, lens.fov)
+    return ",".join(f"{round(v, 4):g}" for v in values)
 
 
 def camera_dewarp(config: AppConfig, camera_id: int) -> tuple[str, Lens, str]:

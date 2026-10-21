@@ -39,6 +39,11 @@ Both apply to live and recorded video in Live View, where they keep their
 view across a Reload and reset like the zoom, and to the playback window
 recordings open in.
 A graphics driver that cannot run the dewarp shows the plain picture.
+A lens that is not a centred full circle of 180 degrees is fitted with
+.B Calibrate...
+next to
+.BR "Fisheye lens" ,
+which draws the lens circle over the camera's current picture.
 Streams are muted by default; hovering a slot reveals a toolbar with
 mute/volume (remembered per camera) and a Snapshot button.
 Audio reaches the player over the RTSP-family protocols
@@ -409,7 +414,9 @@ by right-clicking a camera in the sidebar.
 .PP
 The
 .B camera_fisheye_lens
-section, set only in the file, calibrates a fisheye lens per camera when
+section, written by Camera Settings'
+.B Calibrate...
+or by hand, calibrates a fisheye lens per camera when
 the default, a centred full circle of 180 degrees, does not fit:
 .RI \(dq center_x , center_y , radius , fov \(dq,
 the centre as fractions of the frame width and height, the radius as a

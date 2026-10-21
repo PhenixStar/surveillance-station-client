@@ -62,6 +62,18 @@ async def take_and_save_snapshot(api: SurveillanceAPI, camera_id: int, ds_id: in
     return int(data.get("id", 0))
 
 
+async def fetch_camera_snapshot(api: SurveillanceAPI, camera_id: int) -> bytes:
+    """The camera's current picture as a JPEG, saved nowhere. Camera
+    GetSnapshot at version 3 with cameraId, as the official app asks for
+    it (ApiSrvCamera's snapshot URL)."""
+    return await api.download(
+        api="SYNO.SurveillanceStation.Camera",
+        method="GetSnapshot",
+        version=3,
+        extra_params={"cameraId": str(camera_id)},
+    )
+
+
 async def list_snapshots(
     api: SurveillanceAPI,
     camera_id: int | None = None,

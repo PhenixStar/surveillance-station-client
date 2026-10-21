@@ -35,7 +35,7 @@ Streams are muted by default; hover a slot to reveal a toolbar with mute/volume 
 
 POS receipts from Surveillance Station Transactions appear over the camera each POS device is paired with: every new receipt is drawn at the top-left of every Live View slot showing that camera, live only, and disappears after a set time. Settings &rarr; POS receipt overlay turns it on or off and sets the text size, the maximum lines (a longer receipt keeps its header and total and folds the items between) and how long a receipt stays. While no paired camera is on screen, only the pairing is read, every five minutes, and the overlay switches itself off when the NAS has no Transactions add-on or the account lacks the Transactions privilege.
 
-A fisheye camera can be shown dewarped: pick **Fisheye dewarp** in its Camera Settings, and **Fisheye mount** for how it hangs. On a ceiling, looking straight down, *Panorama* unrolls the circle into two stacked 180&deg; strips with the rim on top, so people stand upright and the slot keeps the camera's shape, and dragging sideways turns it; on a wall, looking straight out, it is one strip as wide as the lens sees with the horizon across the middle. *Virtual PTZ* shows a flat view you look around in by dragging and zoom with the scroll wheel, turning all the way round on a ceiling and as far as the lens sees on a wall. Both apply to live and recorded video in Live View, where the view is kept across a Reload and resets like the zoom does, and to the playback window that Recordings, Events and Time Lapse open a recording in. It runs on the GPU after decoding, so hardware decoding stays on, and saved snapshots keep the original fisheye picture; a graphics driver that cannot run it shows the plain picture instead. A lens that is not a centred full circle of 180&deg; can be calibrated in `config.toml` with `camera_fisheye_lens` (see below).
+A fisheye camera can be shown dewarped: pick **Fisheye dewarp** in its Camera Settings, and **Fisheye mount** for how it hangs. On a ceiling, looking straight down, *Panorama* unrolls the circle into two stacked 180&deg; strips with the rim on top, so people stand upright and the slot keeps the camera's shape, and dragging sideways turns it; on a wall, looking straight out, it is one strip as wide as the lens sees with the horizon across the middle. *Virtual PTZ* shows a flat view you look around in by dragging and zoom with the scroll wheel, turning all the way round on a ceiling and as far as the lens sees on a wall. Both apply to live and recorded video in Live View, where the view is kept across a Reload and resets like the zoom does, and to the playback window that Recordings, Events and Time Lapse open a recording in. It runs on the GPU after decoding, so hardware decoding stays on, and saved snapshots keep the original fisheye picture; a graphics driver that cannot run it shows the plain picture instead. A lens that is not a centred full circle of 180&deg; can be fitted with **Calibrate&hellip;** next to **Fisheye lens**: it shows the camera's current picture with the lens circle drawn over it, to be moved and sized onto the edge of the image, and takes the lens's field of view from its specifications. The result is saved with the camera's other settings on **Apply**, as `camera_fisheye_lens` in `config.toml` (see below).
 </details>
 <details>
 <summary><b>Timeline</b></summary>
@@ -450,6 +450,7 @@ verify_ssl = false
 [profiles.home-nas.camera_fisheye_lens]
 # Lens calibration per camera ID, only when the default (a centred full
 # circle of 180 degrees) does not fit: "center_x,center_y,radius,fov".
+# Camera Settings' Calibrate... writes it.
 # center_x and center_y are fractions of the frame width and height,
 # radius a fraction of its height, fov the lens's field of view in
 # degrees. A missing or invalid field keeps its default.
@@ -473,7 +474,7 @@ from an earlier version kept one shared set at the top level and in
 `[session]`; it is read as the default profile's.
 
 Stream protocols, direct RTSP overrides, Live View stream profiles and the
-fisheye dewarp and mount can also be configured from the UI: right-click a camera in the
+fisheye dewarp, mount and lens can also be configured from the UI: right-click a camera in the
 sidebar for its **Camera Settings**.
 
 #### Live View stream profile
@@ -766,7 +767,7 @@ surveillance-station-client/
 │   │   ├── login.py                     login dialog
 │   │   ├── headerbar.py                 header bar controls
 │   │   ├── sidebar.py                   camera list sidebar
-│   │   ├── camera_settings.py           per-camera settings dialog (protocol, direct URL, stream profile, fisheye dewarp)
+│   │   ├── camera_settings.py           per-camera settings dialog (protocol, direct URL, stream profile, fisheye dewarp and mount)
 │   │   ├── liveview.py                  live stream grid
 │   │   ├── layouts.py                   grid layout definitions
 │   │   ├── timeline.py                  Live View timeline strip
@@ -775,6 +776,7 @@ surveillance-station-client/
 │   │   ├── slot_toolbar.py              per-slot hover toolbar (audio, PTT, PTZ, snapshot)
 │   │   ├── mpv_widget.py                GLArea + mpv render
 │   │   ├── fisheye.py                   fisheye dewarp (panorama, virtual PTZ) shader and view state
+│   │   ├── lens_calibration.py          fisheye lens calibration dialog over the camera's picture
 │   │   ├── rtsp_health.py               RTSP stream stall/health monitor
 │   │   ├── recordings.py                recording browser
 │   │   ├── advanced_search.py           advanced search dialog (shared by Recordings/Snapshots/Events)

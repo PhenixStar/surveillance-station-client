@@ -218,9 +218,59 @@ def test_camera_settings_keep_no_entry_for_the_defaults() -> None:
         _dewarp_dropdown=SimpleNamespace(get_selected=lambda: selected["dewarp"]),
         _mounts=list(MOUNTS),
         _mount_dropdown=SimpleNamespace(get_selected=lambda: selected["mount"]),
+        _lens=Lens(0.51, 0.5, 0.47, 190.0),
     )
     CameraSettingsDialog._save_fisheye(dialog)  # type: ignore[arg-type]
     assert (config.camera_dewarp, config.camera_fisheye_mount) == ({3: MODE_PTZ}, {3: MOUNT_WALL})
+    assert config.camera_fisheye_lens == {3: "0.51,0.5,0.47,190"}
     selected.update(dewarp=0, mount=0)
+    # A spin button's float noise is still the default lens.
+    dialog._lens = Lens(radius=0.48000000000000004)
     CameraSettingsDialog._save_fisheye(dialog)  # type: ignore[arg-type]
     assert (config.camera_dewarp, config.camera_fisheye_mount) == ({}, {})
+    assert config.camera_fisheye_lens == {}
+
+
+def test_format_lens_is_read_back_by_parse_lens() -> None:
+    from surveillance.ui.fisheye import format_lens
+
+    assert format_lens(Lens()) == "0.5,0.5,0.48,180"
+    lens = Lens(0.512345, 0.49, 0.466, 187.0)
+    assert format_lens(lens) == "0.5123,0.49,0.466,187"
+    assert parse_lens(format_lens(lens)) == Lens(0.5123, 0.49, 0.466, 187.0)
+
+
+def test_the_lens_circle_follows_the_fitted_picture() -> None:
+    from surveillance.ui.lens_calibration import fitted_rect, lens_circle
+
+    # A 4:3 picture in a wide widget is centred with bars left and right.
+    rect = fitted_rect(800, 300, 400, 300)
+    assert rect == (200.0, 0.0, 400.0, 300.0)
+    assert lens_circle(rect, Lens()) == (400.0, 150.0, 0.48 * 300)
+    # In a tall one, bars above and below; the radius follows the height.
+    rect = fitted_rect(400, 600, 400, 300)
+    assert rect == (0.0, 150.0, 400.0, 300.0)
+    assert lens_circle(rect, Lens(0.25, 0.0, 0.5)) == (100.0, 150.0, 150.0)
+
+
+def test_the_calibration_picture_is_asked_for_as_the_official_app_does() -> None:
+    import asyncio
+
+    from surveillance.services.snapshot import fetch_camera_snapshot
+
+    calls: list[dict[str, object]] = []
+
+    class _Api:
+        async def download(self, **kwargs: object) -> bytes:
+            calls.append(kwargs)
+            return b"jpeg"
+
+    assert asyncio.run(fetch_camera_snapshot(_Api(), 7)) == b"jpeg"  # type: ignore[arg-type]
+    assert calls == [
+        {
+            "api": "SYNO.SurveillanceStation.Camera",
+            "method": "GetSnapshot",
+            "version": 3,
+            "extra_params": {"cameraId": "7"},
+        }
+    ]
