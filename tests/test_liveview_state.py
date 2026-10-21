@@ -381,6 +381,14 @@ class TestLayoutRestore:
         LiveView._restore_layout_cameras(page, frozenset({0, 1}))  # type: ignore[arg-type]
         assert page.started == [(0, 2), (1, 1), (4, 3), (5, 4)]
 
+    def test_a_slot_changing_camera_stops_the_old_one_first(self) -> None:
+        """Left running, the old camera played under the new one's name
+        until the new URL arrived, and for good if that fetch failed."""
+        page = self._page(active=[0, 1, 4, 5], saved=[2, 9, 3, 4], held={0: 1, 1: 9})
+        LiveView._restore_layout_cameras(page, frozenset({0, 1}))  # type: ignore[arg-type]
+        assert [name for name, _ in page._slots[0].calls] == ["stop_stream", "assign"]
+        assert page._slots[1].called("stop_stream") == []  # kept its camera and stream
+
     def test_set_layout_hands_over_the_outgoing_active_slots(self) -> None:
         page = SimpleNamespace(_current_layout="2x2", _active=[0, 1, 4, 5], handed=None)
         page._save_layout_cameras = lambda: None

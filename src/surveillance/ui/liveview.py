@@ -2668,6 +2668,10 @@ class LiveView(Gtk.Box):
                 if phys in streaming and shown is not None and shown.id == cam_id:
                     continue
                 cam = cam_map[cam_id]
+                # A slot still on screen with another camera goes on playing
+                # it under this one's name until the new URL arrives, and
+                # for good if that fetch fails.
+                self._slots[phys].stop_stream()
                 self._slots[phys].assign(cam)
                 self._restore_saved_audio_state(self._slots[phys], cam)
                 self._update_slot_audio(self._slots[phys], cam)
