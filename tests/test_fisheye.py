@@ -1,5 +1,7 @@
 """Tests for the fisheye dewarp state, lens parsing and config."""
 
+import pytest
+
 from surveillance.ui.fisheye import (
     MODE_PANORAMA,
     MODE_PTZ,
@@ -123,3 +125,36 @@ def test_set_dewarp_stays_off_after_a_failure() -> None:
     player._dewarp_failed = True
     MpvGLArea.set_dewarp(player, MODE_PANORAMA)  # type: ignore[arg-type]
     assert not player._dewarp.active
+
+
+def test_camera_dewarp_reads_the_camera_entries() -> None:
+    from types import SimpleNamespace
+
+    from surveillance.ui.fisheye import camera_dewarp
+
+    config = SimpleNamespace(camera_dewarp={7: MODE_PTZ}, camera_fisheye_lens={7: ",,0.45"})
+    assert camera_dewarp(config, 7) == (MODE_PTZ, Lens(radius=0.45))  # type: ignore[arg-type]
+    assert camera_dewarp(config, 8) == ("", Lens())  # type: ignore[arg-type]
+
+
+def test_the_recording_player_dewarps_its_camera(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A recording opened from Recordings, Events or Time Lapse showed the
+    raw circle of a camera Live View dewarps."""
+    from types import SimpleNamespace
+
+    from surveillance.ui import player
+    from surveillance.ui.player import PlayerDialog
+
+    monkeypatch.setattr(player, "get_stream_url", lambda api, rec: "https://nas/stream")
+    calls: list[tuple[object, ...]] = []
+    dialog = SimpleNamespace(
+        app=SimpleNamespace(
+            api=object(),
+            config=SimpleNamespace(camera_dewarp={7: MODE_PANORAMA}, camera_fisheye_lens={}),
+        ),
+        recording=SimpleNamespace(camera_id=7),
+        player=SimpleNamespace(set_dewarp=lambda *args: calls.append(("dewarp", *args))),
+        _on_stream_url=lambda url: calls.append(("play", url)),
+    )
+    PlayerDialog._start_playback(dialog)  # type: ignore[arg-type]
+    assert calls == [("dewarp", MODE_PANORAMA, Lens()), ("play", "https://nas/stream")]

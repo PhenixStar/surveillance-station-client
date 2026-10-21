@@ -40,6 +40,7 @@ from gi.repository import GLib, Gtk  # type: ignore[import-untyped]
 
 from surveillance.api.models import Recording
 from surveillance.services.recording import get_stream_url
+from surveillance.ui.fisheye import camera_dewarp
 from surveillance.ui.mpv_widget import MpvGLArea, attach_zoom_pan_controls
 
 if TYPE_CHECKING:
@@ -164,6 +165,8 @@ class PlayerDialog(Gtk.Window):
         """Get stream URL and start playback."""
         if not self.app.api:
             return
+        # Dewarped like the camera is in Live View, before the first frame.
+        self.player.set_dewarp(*camera_dewarp(self.app.config, self.recording.camera_id))
         url = get_stream_url(self.app.api, self.recording)
         self._on_stream_url(url)
 

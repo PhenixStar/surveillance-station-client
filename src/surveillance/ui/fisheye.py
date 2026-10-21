@@ -23,7 +23,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Fisheye dewarp for Live View.
+"""Fisheye dewarp for Live View and the recording player.
 
 A fisheye camera delivers its whole hemisphere as one circle. This turns
 it back into something readable, on the GPU, after mpv has decoded and
@@ -53,6 +53,10 @@ import ctypes
 import logging
 import math
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from surveillance.config import AppConfig
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +110,15 @@ def parse_lens(text: str) -> Lens:
     if not (10.0 <= fov <= 360.0):
         fov = default.fov
     return Lens(cx, cy, radius, fov)
+
+
+def camera_dewarp(config: AppConfig, camera_id: int) -> tuple[str, Lens]:
+    """The dewarp mode and lens *camera_id* is set to, as
+    MpvGLArea.set_dewarp takes them."""
+    return (
+        config.camera_dewarp.get(camera_id, MODE_OFF),
+        parse_lens(config.camera_fisheye_lens.get(camera_id, "")),
+    )
 
 
 @dataclass

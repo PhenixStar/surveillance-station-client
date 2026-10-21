@@ -68,7 +68,7 @@ from surveillance.services.recording import (
 )
 from surveillance.services.snapshot import download_snapshot, take_and_save_snapshot
 from surveillance.services.ws_bridge import MIN_HISTORY_DELTA_SECONDS, WebSocketBridge
-from surveillance.ui.fisheye import parse_lens
+from surveillance.ui.fisheye import camera_dewarp
 from surveillance.ui.layouts import LAYOUT_VISIBLE, valid_layout
 from surveillance.ui.mpv_widget import MpvGLArea, attach_zoom_pan_controls
 from surveillance.ui.rtsp_health import RtspHealthMonitor
@@ -3242,10 +3242,7 @@ class LiveView(Gtk.Box):
     def _apply_dewarp(self, slot: CameraSlot, camera: Camera) -> None:
         """Set *slot*'s fisheye dewarp from *camera*'s settings, before the
         first frame of a stream starting there, live or History."""
-        slot.player.set_dewarp(
-            self.app.config.camera_dewarp.get(camera.id, ""),
-            parse_lens(self.app.config.camera_fisheye_lens.get(camera.id, "")),
-        )
+        slot.player.set_dewarp(*camera_dewarp(self.app.config, camera.id))
 
     def _enter_history_mode(self, slot: CameraSlot, recording: Recording, target_unix: int) -> int:
         """Switch *slot* into History mode, playing *recording* from
