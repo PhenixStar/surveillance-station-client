@@ -86,6 +86,7 @@ class _Player:
 
     def __init__(self) -> None:
         self._dewarp = DewarpView()
+        self._dewarp_failed = False
         self.resets = 0
 
     def reset_zoom(self) -> None:
@@ -111,3 +112,14 @@ def test_set_dewarp_keeps_the_view_when_nothing_changes() -> None:
     assert player.resets == 2
     MpvGLArea.set_dewarp(player, "")  # type: ignore[arg-type]
     assert (player._dewarp.active, player.resets) == (False, 3)
+
+
+def test_set_dewarp_stays_off_after_a_failure() -> None:
+    """GL that could not dewarp once is not asked again by the next
+    stream, which would only log the same traceback."""
+    from surveillance.ui.mpv_widget import MpvGLArea
+
+    player = _Player()
+    player._dewarp_failed = True
+    MpvGLArea.set_dewarp(player, MODE_PANORAMA)  # type: ignore[arg-type]
+    assert not player._dewarp.active

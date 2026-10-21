@@ -384,6 +384,9 @@ class MpvGLArea(Gtk.GLArea):
         # created on the first dewarped render with the context current.
         self._dewarp = DewarpView()
         self._fisheye: FisheyeRenderer | None = None
+        # Set once the dewarp has failed on this widget's GL, which will
+        # not do better on the next stream (see _render_dewarped).
+        self._dewarp_failed = False
 
         self.set_auto_render(False)
         self.set_hexpand(True)
@@ -575,6 +578,7 @@ class MpvGLArea(Gtk.GLArea):
         except Exception:
             log.exception("Fisheye dewarp failed; showing the plain picture")
             self._dewarp.mode = ""
+            self._dewarp_failed = True
             from OpenGL.GL import GL_FRAMEBUFFER, glBindFramebuffer
 
             glBindFramebuffer(GL_FRAMEBUFFER, fbo)
@@ -586,7 +590,9 @@ class MpvGLArea(Gtk.GLArea):
         delivered with mode "". A change starts from the default view and
         drops any flat zoom, which the dewarp's own zoom replaces; the
         same mode and lens again keep both, so a restarted stream keeps
-        the view it had."""
+        the view it had. Always as delivered once the dewarp failed here."""
+        if self._dewarp_failed:
+            mode = ""
         lens = lens or Lens()
         if mode == self._dewarp.mode and lens == self._dewarp.lens:
             return
