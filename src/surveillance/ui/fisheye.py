@@ -180,7 +180,10 @@ class DewarpView:
         half = self.lens.fov / 2.0
         if self.mode == MODE_PTZ and self.wall:
             self.pan = min(half, max(-half, self.pan - dx * self.fov))
-            self.tilt = min(half, max(-half, self.tilt + dy * self.fov))
+            # Past straight up or down the view would come back upside
+            # down, which a lens wider than 180 degrees can reach.
+            limit = min(half, 90.0)
+            self.tilt = min(limit, max(-limit, self.tilt + dy * self.fov))
         elif self.mode == MODE_PTZ:
             self.pan = (self.pan - dx * self.fov) % 360.0
             self.tilt = min(half, max(0.0, self.tilt + dy * self.fov))

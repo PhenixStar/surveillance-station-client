@@ -274,3 +274,14 @@ def test_the_calibration_picture_is_asked_for_as_the_official_app_does() -> None
             "extra_params": {"cameraId": "7"},
         }
     ]
+
+
+def test_wall_ptz_never_tilts_past_straight_up_or_down() -> None:
+    """A lens wider than 180 degrees let the view tilt over the top, and
+    the picture came back upside down."""
+    view = DewarpView(mode=MODE_PTZ, lens=Lens(fov=200.0), mount=MOUNT_WALL)
+    view.reset()
+    view.drag(-10.0, 10.0)
+    assert (view.pan, view.tilt) == (100.0, 90.0)  # the lens still reaches 100 sideways
+    view.drag(0.0, -10.0)
+    assert view.tilt == -90.0
