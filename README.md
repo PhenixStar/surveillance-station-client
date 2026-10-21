@@ -23,7 +23,7 @@
 <details>
 <summary><b>Live View</b></summary>
 
-Real-time camera streams in 1&times;1, 2&times;2, 3&times;3, or 4&times;4 grid layouts, selected from the grid button in the header bar. Each layout keeps its own camera arrangement. Clear a single slot from the camera sidebar or the whole layout from the same grid menu, with a confirmation prompt. Scroll to zoom in on a slot (centered on the cursor) and click-and-drag to pan, or to steer a dewarped fisheye camera (see below); zoom resets when switching layouts or leaving the page.
+Real-time camera streams in 1&times;1, 2&times;2, 3&times;3, or 4&times;4 grid layouts, selected from the grid button in the header bar. Each layout keeps its own camera arrangement. Clear a single slot from the camera sidebar or the whole layout from the same grid menu, with a confirmation prompt. Scroll to zoom in on a slot (centered on the cursor) and click-and-drag to pan; on a dewarped fisheye camera they steer the view instead (see below); zoom resets when switching layouts or leaving the page.
 
 <p align="center">
   <img src="assets/screenshots/live-view-slot-menu.webp" alt="Right-click menu of a Live View slot">
@@ -35,7 +35,7 @@ Streams are muted by default; hover a slot to reveal a toolbar with mute/volume 
 
 POS receipts from Surveillance Station Transactions appear over the camera each POS device is paired with: every new receipt is drawn at the top-left of every Live View slot showing that camera, live only, and disappears after a set time. Settings &rarr; POS receipt overlay turns it on or off and sets the text size, the maximum lines (a longer receipt keeps its header and total and folds the items between) and how long a receipt stays. While no paired camera is on screen, only the pairing is read, every five minutes, and the overlay switches itself off when the NAS has no Transactions add-on or the account lacks the Transactions privilege.
 
-A fisheye camera can be shown dewarped: pick **Fisheye dewarp** in its Camera Settings, and **Fisheye mount** for how it hangs. On a ceiling, looking straight down, *Panorama* unrolls the circle into two stacked 180&deg; strips with the rim on top, so people stand upright and the slot keeps the camera's shape, and dragging sideways turns it; on a wall, looking straight out, it is one strip as wide as the lens sees with the horizon across the middle. *Virtual PTZ* shows a flat view you look around in by dragging and zoom with the scroll wheel, turning all the way round on a ceiling and as far as the lens sees on a wall. Both apply to live and recorded video in Live View, where the view is kept across a Reload and resets like the zoom does, and to the playback window that Recordings, Events and Time Lapse open a recording in. It runs on the GPU after decoding, so hardware decoding stays on, and saved snapshots keep the original fisheye picture; a graphics driver that cannot run it shows the plain picture instead. A lens that is not a centred full circle of 180&deg; can be fitted with **Calibrate&hellip;** next to **Fisheye lens**: it shows the camera's current picture with the lens circle drawn over it, to be moved and sized onto the edge of the image, and takes the lens's field of view from its specifications. The result is saved with the camera's other settings on **Apply**, as `camera_fisheye_lens` in `config.toml` (see below).
+A fisheye camera can be shown dewarped: pick **Fisheye dewarp** in its Camera Settings, and **Fisheye mount** for how it hangs. On a ceiling, looking straight down, *Panorama* unrolls the circle into two stacked 180&deg; strips with the rim on top, so people stand upright and the slot keeps the camera's shape, and dragging sideways turns it; on a wall, looking straight out, it is one strip as wide as the lens sees with the horizon across the middle, which does not move. The scroll wheel does nothing on a panorama. *Virtual PTZ* shows a flat view you look around in by dragging and zoom with the scroll wheel, turning all the way round on a ceiling and as far as the lens sees on a wall, but never past straight up or down. Both apply to live and recorded video in Live View, where the view is kept across a Reload and resets like the zoom does, and to the playback window that Recordings, Events and Time Lapse open a recording in. It runs on the GPU after decoding, so hardware decoding stays on, and saved snapshots keep the original fisheye picture; a graphics driver that cannot run it shows the plain picture instead. A lens that is not a centred full circle of 180&deg; can be fitted with **Calibrate&hellip;** next to **Fisheye lens**: it shows the camera's current picture with the lens circle drawn over it, to be moved and sized onto the edge of the image, and takes the lens's field of view from its specifications. The result is saved with the camera's other settings on **Apply**, as `camera_fisheye_lens` in `config.toml` (see below).
 </details>
 <details>
 <summary><b>Timeline</b></summary>
@@ -443,14 +443,13 @@ verify_ssl = false
 # 5 = "high"
 
 [profiles.home-nas.camera_dewarp]
-# Fisheye dewarp per camera ID, for a lens looking straight down:
-# panorama or ptz. A camera with no entry is shown as delivered.
+# Fisheye dewarp per camera ID: panorama or ptz. A camera with no entry is shown as delivered.
 # 5 = "ptz"
 
 [profiles.home-nas.camera_fisheye_lens]
 # Lens calibration per camera ID, only when the default (a centred full
 # circle of 180 degrees) does not fit: "center_x,center_y,radius,fov".
-# Camera Settings' Calibrate... writes it.
+# Set from Camera Settings with Calibrate… and Apply.
 # center_x and center_y are fractions of the frame width and height,
 # radius a fraction of its height, fov the lens's field of view in
 # degrees. A missing or invalid field keeps its default.
