@@ -443,7 +443,8 @@ verify_ssl = false
 # 5 = "high"
 
 [profiles.home-nas.camera_dewarp]
-# Fisheye dewarp per camera ID: panorama or ptz. A camera with no entry is shown as delivered.
+# Fisheye dewarp per camera ID: panorama or ptz. A camera with no
+# entry is shown as delivered.
 # 5 = "ptz"
 
 [profiles.home-nas.camera_fisheye_lens]
