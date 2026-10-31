@@ -48,7 +48,12 @@ from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango  # type: ignore[impor
 
 from surveillance.api.auth import SessionExpiredError
 from surveillance.api.models import Camera, CameraStatus, EMap, EMapItem
-from surveillance.services.emap import EMapService, emaps_unavailable, marker_to_pixels
+from surveillance.services.emap import (
+    EMapService,
+    EMapsTooOldError,
+    emaps_unavailable,
+    marker_to_pixels,
+)
 from surveillance.util.async_bridge import run_async
 
 if TYPE_CHECKING:
@@ -352,6 +357,11 @@ class EMapsView(Gtk.Box):
                 self._show_message(
                     "E-Maps could not be loaded: logging in to the NAS again failed. "
                     "Log out and back in to try again."
+                )
+            elif isinstance(error, EMapsTooOldError):
+                self._show_message(
+                    "E-Maps are not available: this Surveillance Station's E-Map "
+                    "interface is older than the one the Maps page reads."
                 )
             else:
                 self._show_message(
