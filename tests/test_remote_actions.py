@@ -80,7 +80,7 @@ class TestParseRemoteRequest:
             {"fullscreen": True},
             {"seek": "yesterday"},
             {"seek": "2026-10-30T22:15", "live": True},
-            {"page": "maps"},
+            {"page": "nowhere"},
         ],
     )
     def test_malformed_option_is_rejected(self, options: dict[str, object]) -> None:

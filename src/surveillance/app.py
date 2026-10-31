@@ -57,7 +57,7 @@ CSS_PATH = Path(__file__).parent / "data" / "style.css"
 ICONS_PATH = Path(__file__).parent / "data" / "icons"
 
 # Pages --page can switch to, by their name in the window's page stack.
-REMOTE_PAGES = ("live", "recordings", "events", "snapshots", "timelapse", "settings")
+REMOTE_PAGES = ("live", "recordings", "events", "snapshots", "timelapse", "maps", "settings")
 
 
 @dataclass(frozen=True)
