@@ -100,9 +100,17 @@ def parse_remote_request(options: dict[str, object]) -> RemoteRequest | None:
     if grid is not None and grid not in LAYOUT_VISIBLE:
         raise ValueError(f"Unknown grid {grid!r}, expected one of {', '.join(LAYOUT_VISIBLE)}")
 
-    camera_id = options.get("camera")
-    if camera_id is not None and (not isinstance(camera_id, int) or camera_id <= 0):
-        raise ValueError(f"Invalid camera ID {camera_id!r}")
+    camera_id: int | None = None
+    camera_arg = options.get("camera")
+    if camera_arg is not None:
+        # A string option, not an INT one: GApplication leaves an INT
+        # option set to 0 out of the options, so --camera 0 arrived as no
+        # option at all, and GOption itself refused a non-number with a
+        # status of its own.
+        text = str(camera_arg)
+        if not (text.isascii() and text.isdigit()) or int(text) == 0:
+            raise ValueError(f"Invalid camera ID {text!r}")
+        camera_id = int(text)
     fullscreen = bool(options.get("fullscreen", False))
     if fullscreen and camera_id is None:
         raise ValueError("--fullscreen needs --camera")
@@ -127,7 +135,7 @@ def parse_remote_request(options: dict[str, object]) -> RemoteRequest | None:
 
     return RemoteRequest(
         grid=grid if isinstance(grid, str) else None,
-        camera_id=camera_id if isinstance(camera_id, int) else None,
+        camera_id=camera_id,
         fullscreen=fullscreen,
         seek=seek,
         live=live,
@@ -173,7 +181,7 @@ class SurveillanceApp(Gtk.Application):
         # do_command_line.
         remote_options = [
             ("grid", GLib.OptionArg.STRING, "Switch Live View to a grid layout", "1x1|2x2|3x3|4x4"),
-            ("camera", GLib.OptionArg.INT, "Show a camera in the focused Live View slot", "ID"),
+            ("camera", GLib.OptionArg.STRING, "Show a camera in the focused Live View slot", "ID"),
             ("fullscreen", GLib.OptionArg.NONE, "With --camera: show it alone, in 1x1", None),
             ("seek", GLib.OptionArg.STRING, "Play every Live View slot from that time", "TIME"),
             ("live", GLib.OptionArg.NONE, "Return every Live View slot to live", None),

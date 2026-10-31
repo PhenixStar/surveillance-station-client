@@ -46,7 +46,7 @@ class TestParseRemoteRequest:
 
     def test_each_option(self) -> None:
         request = parse_remote_request(
-            {"grid": "3x3", "camera": 12, "fullscreen": True, "page": "events"}
+            {"grid": "3x3", "camera": "12", "fullscreen": True, "page": "events"}
         )
         assert request == RemoteRequest(grid="3x3", camera_id=12, fullscreen=True, page="events")
         assert parse_remote_request({"live": True}) == RemoteRequest(live=True)
@@ -65,8 +65,11 @@ class TestParseRemoteRequest:
         "options",
         [
             {"grid": "5x5"},
-            {"camera": 0},
-            {"camera": -3},
+            {"camera": "0"},
+            {"camera": "-3"},
+            {"camera": "abc"},
+            {"camera": ""},
+            {"camera": " 12"},
             {"fullscreen": True},
             {"seek": "yesterday"},
             {"seek": "2026-10-30T22:15", "live": True},

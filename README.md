@@ -271,7 +271,7 @@ python -m surveillance                        # run directly from the source tre
 
 The same command also controls a client that is already running: a second
 launch hands its options over to the running instance and exits, with
-status 2 if an option is malformed. A first launch carries them out once
+status 2 if an option's value is invalid. A first launch carries them out once
 you are logged in and the camera list has loaded.
 
 ```sh
