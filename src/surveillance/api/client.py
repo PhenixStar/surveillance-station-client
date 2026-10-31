@@ -39,7 +39,6 @@ from surveillance.api.auth import AuthError, SessionExpiredError, login
 from surveillance.api.models import ApiInfo
 from surveillance.config import ConnectionProfile
 
-
 _DEFAULT_HTTP_TIMEOUT = 30.0
 
 
@@ -62,7 +61,6 @@ def _http_timeout_from_env() -> float:
     except ValueError:
         return _DEFAULT_HTTP_TIMEOUT
     return value if value > 0 else _DEFAULT_HTTP_TIMEOUT
-
 
 
 log = logging.getLogger(__name__)
