@@ -540,6 +540,34 @@ class TestPerProfileCameraSettings:
         cfg.activate_profile("office")
         assert cfg.camera_overrides == {}
 
+    def test_last_emap_id_is_kept_per_profile(self, tmp_path: Path, monkeypatch: object) -> None:
+        """E-Map ids, like camera ids, are numbered per NAS."""
+        import surveillance.config as cfg
+
+        monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "config.toml")  # type: ignore[attr-defined]
+        monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)  # type: ignore[attr-defined]
+        config = self._two_profiles()
+        config.last_emap_id = 3
+        config.activate_profile("office")
+        assert config.last_emap_id == 0
+        _write_config(config)
+
+        data = tomllib.loads((tmp_path / "config.toml").read_text())
+        assert data["profiles"]["home"]["last_emap_id"] == 3
+        assert "last_emap_id" not in data["profiles"]["office"]
+        assert "last_emap_id" not in data.get("session", {})
+        loaded = load_config()
+        assert loaded.active_profile == "home"
+        assert loaded.last_emap_id == 3
+        loaded.activate_profile("office")
+        assert loaded.last_emap_id == 0
+
+    def test_a_hand_edited_last_emap_id_that_is_not_an_id_is_dropped(self) -> None:
+        for value in ("3", -2, True, 1.5):
+            cfg = _config_from_data(_in_profile({"last_emap_id": value}))
+            assert cfg.last_emap_id == 0, value
+        assert _config_from_data(_in_profile({"last_emap_id": 4})).last_emap_id == 4
+
 
 class TestSearchTimesAsText:
     """The README's commented example search time, enabled without its
