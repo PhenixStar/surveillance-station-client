@@ -215,6 +215,20 @@ class TestApplyRemoteRequest:
         window.live.restore_session.assert_called_once()
         window.live.show_camera.assert_called_once_with(_camera(12), solo=False)
 
+    def test_restored_by_a_later_poll_when_the_first_list_failed(self) -> None:
+        """The camera list asked for at login can fail. The poll that
+        loads it later restored nothing, so the layout stayed empty and
+        every request was held until logout."""
+        window = _window(ready=False)
+        window._restore_live_session = lambda c: MainWindow._restore_live_session(window, c)
+        window.apply_remote_request(RemoteRequest(camera_id=12))
+        for _poll in range(2):
+            MainWindow._on_cameras_updated(window, [_camera(12)])
+        assert window._live_session_ready
+        assert window._pending_remote_requests == []
+        window.live.restore_session.assert_called_once()
+        window.live.show_camera.assert_called_once_with(_camera(12), solo=False)
+
 
 class TestLiveViewEntryPoints:
     """What the window calls on Live View, each the path the UI takes."""

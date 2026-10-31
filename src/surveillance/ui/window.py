@@ -222,7 +222,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if self.app.api:
             webhooks.start(self.app.config.webhooks, self.app.api.profile.name)
         self._setup_content_pages()
-        self.sidebar.refresh(on_complete=self._restore_live_session)
+        self.sidebar.refresh()
         self.sidebar.start_polling()
         self._start_polling()
         self._check_for_update()
@@ -402,6 +402,12 @@ class MainWindow(Gtk.ApplicationWindow):
         if live_view and hasattr(live_view, "sync_camera_statuses"):
             live_view.sync_camera_statuses(cameras)
         webhooks.note_cameras(cameras)
+        # On the first list that loads, not only the one asked for at
+        # login: when that one failed, the poll that filled the sidebar
+        # later restored nothing, and every command line request was
+        # held until logout.
+        if not self._live_session_ready:
+            self._restore_live_session(cameras)
 
     def _on_home_mode(self, on: bool) -> None:
         self.headerbar.set_home_mode(on)

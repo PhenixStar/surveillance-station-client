@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import gi
 
@@ -177,7 +177,7 @@ class CameraSidebar(Gtk.Box):
         """Show/hide the update dot on the About nav row."""
         self._about_update_dot.set_visible(available)
 
-    def refresh(self, on_complete: Any = None) -> None:
+    def refresh(self) -> None:
         """Refresh the camera list."""
         api = self.app.api
         if not api:
@@ -192,8 +192,6 @@ class CameraSidebar(Gtk.Box):
             self._update_camera_list(cameras)
             if self.on_cameras_updated:
                 self.on_cameras_updated(cameras)
-            if on_complete:
-                on_complete(cameras)
 
         run_async(
             list_cameras(api),
