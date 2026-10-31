@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import gi
 
@@ -44,6 +44,8 @@ from surveillance.ui.layouts import valid_layout
 from surveillance.ui.sidebar import CameraSidebar
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from surveillance.app import RemoteRequest, SurveillanceApp
     from surveillance.services.transactions import Transaction
     from surveillance.ui.liveview import LiveView
@@ -417,6 +419,22 @@ class MainWindow(Gtk.ApplicationWindow):
         self.headerbar.set_notification_count(count)
         webhooks.note_unread_alerts(count)
 
+    def _for_session(self, handler: Callable[[Any], None]) -> Callable[[Any], None]:
+        """*handler*, for a poll's answer, run only while the session it
+        asked is still the one logged in.
+
+        An answer from the NAS logged out of could land after the next
+        login: it became the next profile's webhook baseline, set its
+        header, or switched its polling off.
+        """
+        api = self.app.api
+
+        def _run(value: Any) -> None:
+            if self.app.api is api:
+                handler(value)
+
+        return _run
+
     def _start_polling(self) -> None:
         """Start background polling for alerts and home mode."""
         self._stop_polling()
@@ -449,8 +467,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
             run_async(
                 get_homemode(self.app.api),
-                callback=lambda info: self._on_home_mode(info.on),
-                error_callback=_homemode_error,
+                callback=self._for_session(lambda info: self._on_home_mode(info.on)),
+                error_callback=self._for_session(_homemode_error),
             )
             return True
 
@@ -479,8 +497,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
             run_async(
                 count_unread_alerts(self.app.api),
-                callback=self._on_unread_alerts,
-                error_callback=_alerts_error,
+                callback=self._for_session(self._on_unread_alerts),
+                error_callback=self._for_session(_alerts_error),
             )
             return True
 
@@ -588,7 +606,11 @@ class MainWindow(Gtk.ApplicationWindow):
             # nothing is paired at all.
             if paired is not None and not shown & set(paired.values()):
                 return True
-            run_async(_fetch(shown, paired), callback=_apply, error_callback=_transactions_error)
+            run_async(
+                _fetch(shown, paired),
+                callback=self._for_session(_apply),
+                error_callback=self._for_session(_transactions_error),
+            )
             return True
 
         self._transactions_poll_id = GLib.timeout_add_seconds(
