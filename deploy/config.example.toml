@@ -1,0 +1,31 @@
+# ~/.config/surveillance-station/config.toml — placeholders only. The app rewrites this file on exit;
+# edit it while the app is closed. Credentials are NOT here: the login dialog stores them in the keyring.
+
+[general]
+default_profile = "nvr-lan"
+poll_interval_cameras = 30
+poll_interval_alerts = 30
+poll_interval_homemode = 60
+poll_interval_transactions = 5
+
+[profiles.nvr-lan]
+host = "nvr.example.lan"     # Surveillance Station host or DSM name
+port = 5001
+https = true
+verify_ssl = false           # self-signed on 5001
+
+[profiles.nvr-public]
+host = "nvr.example.com"     # reverse proxy / tunnel with a valid certificate
+port = 443
+https = true
+verify_ssl = true
+
+# Named layout presets (mce branch): listed under "Presets" in the Live View grid menu.
+# cameras = Surveillance Station camera ids in tile order; 0 = empty tile.
+[layout_presets."Front of house"]
+grid = "2x2"
+cameras = [1, 2, 3, 4]
+
+[layout_presets."All stores"]
+grid = "4x4"
+cameras = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
