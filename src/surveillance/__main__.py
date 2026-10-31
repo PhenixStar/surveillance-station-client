@@ -222,8 +222,9 @@ def main() -> None:
 
     app = SurveillanceApp()
     running.append(app)
-    app.run(sys.argv)
-    app.exit_now()
+    # run()'s status is the primary instance's verdict on a command line
+    # handed over to it (2 for a malformed remote control option).
+    app.exit_now(app.run(sys.argv))
 
 
 if __name__ == "__main__":
