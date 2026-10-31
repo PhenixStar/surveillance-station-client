@@ -398,3 +398,103 @@ class TimeLapseRecording:
             recording=data.get("recording", False),
             path=data.get("path", ""),
         )
+
+
+# EMapItem.ref_item_type of a camera marker; items of other types are
+# kept but not drawn.
+EMAP_REF_CAMERA = 0
+
+
+@dataclass(frozen=True)
+class EMapItem:
+    """One item placed on an E-Map, from Emap v2 Load.
+
+    lng and lat are fractions of the map image's HEIGHT on both axes, with
+    the origin at the bottom-left, so lng runs past 1 on a landscape image
+    (see services.emap.marker_to_pixels). ref_item_id is the camera id when
+    ref_item_type is EMAP_REF_CAMERA.
+    """
+
+    id: int
+    emap_id: int
+    emap_type: int
+    ref_item_type: int
+    ref_item_id: int
+    lng: float
+    lat: float
+    direction: int = 0
+    view_angle: int = 0
+
+    @property
+    def is_camera(self) -> bool:
+        return self.ref_item_type == EMAP_REF_CAMERA
+
+    @classmethod
+    def from_api(cls, data: dict) -> EMapItem:  # type: ignore[type-arg]
+        """Raises KeyError, TypeError or ValueError on a row without a
+        referenced item or usable coordinates."""
+        return cls(
+            id=int(data.get("id", 0)),
+            emap_id=int(data.get("emapId", 0)),
+            emap_type=int(data.get("emapType", 0)),
+            ref_item_type=int(data.get("refItemType", -1)),
+            ref_item_id=int(data["refItemIdOnHost"]),
+            lng=float(data["lng"]),
+            lat=float(data["lat"]),
+            direction=int(data.get("direction", 0)),
+            view_angle=int(data.get("viewAngle", 0)),
+        )
+
+
+@dataclass(frozen=True)
+class EMap:
+    """A Surveillance Station E-Map: an image with items placed on it.
+
+    width and height are what the NAS reports for the image, 0 when it
+    does not; the decoded image's own size is the one to draw with.
+    items is empty in an Emap List entry and filled by Emap Load.
+    """
+
+    id: int
+    name: str
+    image_name: str
+    width: int = 0
+    height: int = 0
+    items: tuple[EMapItem, ...] = ()
+
+    @property
+    def cameras(self) -> tuple[EMapItem, ...]:
+        """The camera markers among the items."""
+        return tuple(item for item in self.items if item.is_camera)
+
+    @classmethod
+    def from_api(cls, data: dict) -> EMap:  # type: ignore[type-arg]
+        items: list[EMapItem] = []
+        for row in data.get("item") or []:
+            if not isinstance(row, dict):
+                continue
+            try:
+                items.append(EMapItem.from_api(row))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return cls(
+            id=int(data.get("id", 0)),
+            name=str(data.get("name", "")),
+            # filename on Surveillance Station 9.3; imgName and imageName
+            # are what other versions' web UI reads.
+            image_name=str(
+                data.get("filename") or data.get("imgName") or data.get("imageName") or ""
+            ),
+            width=_int_or_zero(data.get("imgWidth")),
+            height=_int_or_zero(data.get("imgHeight")),
+            items=tuple(items),
+        )
+
+
+def _int_or_zero(value: object) -> int:
+    if not isinstance(value, (int, float, str)):
+        return 0
+    try:
+        return int(value)
+    except ValueError:
+        return 0

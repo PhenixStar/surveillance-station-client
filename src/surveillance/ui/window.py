@@ -350,6 +350,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.sidebar.set_visible(self.app.config.sidebar_visible)
 
         from surveillance.ui.about import AboutView
+        from surveillance.ui.emaps import EMapsView
         from surveillance.ui.events import EventsView
         from surveillance.ui.licenses import LicensesView
         from surveillance.ui.liveview import LiveView
@@ -366,6 +367,7 @@ class MainWindow(Gtk.ApplicationWindow):
             ("snapshots", SnapshotsView),
             ("events", EventsView),
             ("timelapse", TimeLapseView),
+            ("maps", EMapsView),
             ("licenses", LicensesView),
             ("about", AboutView),
         ]:

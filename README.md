@@ -124,6 +124,15 @@ Browse saved snapshots, filter by camera and time range, view, download, or dele
 Browse, play back, download, lock/unlock, and delete Smart Time Lapse recordings. Filter by time lapse task.
 </details>
 <details>
+<summary><b>Maps</b></summary>
+
+<p align="center">
+  <img src="assets/screenshots/maps.webp" alt="Maps page" width="100%">
+</p>
+
+Shows the E-Maps set up in Surveillance Station, read only: pick a map from the list and its image is drawn to fit the page, with a dot for every camera placed on it, green while the camera is enabled and red when it is disconnected or disabled (grey for a camera the account cannot see). Hover a dot for the camera's name, and click it to put the camera in Live View the same way a click in the camera sidebar does: into the selected slot, or alone in 1&times;1 when no slot is selected. The map last opened is remembered per connection profile. PNG, JPEG and SVG map images are drawn; one that cannot be decoded still shows its cameras on a blank map. The page says so instead when the NAS has no E-Maps or the account may not view them. Maps are created and edited in Surveillance Station itself.
+</details>
+<details>
 <summary><b>Events</b></summary>
 
 <p align="center">
@@ -346,7 +355,7 @@ Everything else appears once you are connected.
 After connecting, the camera list appears in the sidebar. Click a camera to
 start its live stream. Use the navigation buttons at the bottom of the sidebar
 to switch between **Live View**, **Recordings**, **Snapshots**, **Events**,
-**Time Lapse**, **Licenses**, **Settings**, and **About**; the button for the
+**Time Lapse**, **Maps**, **Licenses**, **Settings**, and **About**; the button for the
 current page stays highlighted. The header bar shows the current page name and holds the panel
 toggle on the left, which hides or shows the whole sidebar.
 
@@ -433,6 +442,7 @@ verify_ssl = false
 # Everything keyed by camera ID lives under the profile it belongs to,
 # since every NAS numbers its cameras from 1.
 # search_camera_ids = [1, 3]   # cameras of the last recording search
+# last_emap_id = 2             # E-Map last opened on the Maps page
 
 [profiles.home-nas.layout_cameras]
 # Camera IDs per layout (0 = empty slot).  Each layout remembers its
@@ -815,6 +825,7 @@ surveillance-station-client/
 │   │   ├── transactions.py              POS transactions (receipt overlay)
 │   │   ├── license.py                   license management
 │   │   ├── timelapse.py                 time lapse management
+│   │   ├── emap.py                      E-Map list, items and images (Maps page)
 │   │   ├── update_check.py              GitHub release version check
 │   │   └── webhooks.py                  outgoing webhooks (client events)
 │   ├── ui/
@@ -841,6 +852,7 @@ surveillance-station-client/
 │   │   ├── events.py                    event list
 │   │   ├── licenses.py                  license management
 │   │   ├── timelapse.py                 time lapse browser
+│   │   ├── emaps.py                     Maps page (E-Maps with camera markers)
 │   │   ├── notifications.py             alert popover
 │   │   ├── settings.py                  Settings page
 │   │   └── labels.py                    combo label helpers shared by the browser pages
@@ -855,6 +867,7 @@ surveillance-station-client/
     ├── test_camera_settings.py
     ├── test_config.py
     ├── test_date_time_picker.py
+    ├── test_emap.py
     ├── test_fisheye.py
     ├── test_legacy_event_bits.py
     ├── test_icons.py
@@ -903,6 +916,8 @@ surveillance-station-client/
 | `SYNO.SurveillanceStation.HomeMode` | Get/set home mode status |
 | `SYNO.SurveillanceStation.Transactions.Device` | POS devices and the camera each is paired with |
 | `SYNO.SurveillanceStation.Transactions.Transaction` | Latest POS receipts for the Live View overlay (`Enum`) |
+| `SYNO.SurveillanceStation.Emap` | E-Maps for the Maps page: the map list (`List`) and one map's camera markers (`Load`) |
+| `SYNO.SurveillanceStation.Emap.Image` | A map's image (`Load`) |
 | `SYNO.SurveillanceStation.License` | License management |
 | `SYNO.SurveillanceStation.Info` | NAS device info |
 
