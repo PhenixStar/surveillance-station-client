@@ -54,7 +54,7 @@ def _camera(camera_id: int, status: CameraStatus = CameraStatus.ENABLED) -> Came
 @pytest.fixture(autouse=True)
 def no_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """No keyring in tests unless one asks for a token."""
-    monkeypatch.setattr(webhooks, "webhook_token", lambda profile: None)
+    monkeypatch.setattr(webhooks, "webhook_token", lambda url: None)
 
 
 @pytest.fixture
@@ -113,18 +113,21 @@ class TestPayload:
     ) -> None:
         asked: list[str] = []
 
-        def _token(profile: str) -> str:
-            asked.append(profile)
-            return "s3cret"
+        def _token(url: str) -> str | None:
+            asked.append(url)
+            return "s3cret" if url == TARGET else None
 
         monkeypatch.setattr(webhooks, "webhook_token", _token)
         with respx.mock(assert_all_called=False) as mock:
             route = mock.post(TARGET).respond(200)
-            dispatcher = make_dispatcher()  # type: ignore[operator]
+            other = mock.post(OTHER_TARGET).respond(200)
+            dispatcher = make_dispatcher([TARGET, OTHER_TARGET])  # type: ignore[operator]
             dispatcher.emit("alert")
             await dispatcher.wait_idle()
-        assert asked == ["test-nas"]
+        assert asked == [TARGET, OTHER_TARGET]
         assert route.calls[0].request.headers["authorization"] == "Bearer s3cret"
+        # The other receiver never sees a token that is not its own.
+        assert "authorization" not in other.calls[0].request.headers
 
     async def test_every_target_gets_the_event(self, make_dispatcher: object) -> None:
         with respx.mock(assert_all_called=False) as mock:
@@ -293,7 +296,7 @@ class TestModuleSwitch:
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        def _broken(profile: str) -> str:
+        def _broken(url: str) -> str:
             raise RuntimeError("no backend")
 
         monkeypatch.setattr(webhooks, "webhook_token", _broken)
@@ -313,7 +316,7 @@ class TestHelpers:
             raise keyring.errors.KeyringError("locked")
 
         monkeypatch.setattr(credentials.keyring, "get_password", _fail)
-        assert webhooks.webhook_token("test-nas") is None
+        assert webhooks.webhook_token(TARGET) is None
 
     def test_token_item_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.undo()
@@ -321,8 +324,8 @@ class TestHelpers:
         monkeypatch.setattr(
             credentials.keyring, "get_password", lambda s, n: asked.append((s, n)) or "t"
         )
-        assert webhooks.webhook_token("test-nas") == "t"
-        assert asked == [("surveillance-station", "test-nas:webhook_token")]
+        assert webhooks.webhook_token(TARGET) == "t"
+        assert asked == [("surveillance-station", f"webhook_token:{TARGET}")]
 
     def test_every_event_is_on_by_default(self) -> None:
         assert WebhookConfig().events == list(WEBHOOK_EVENTS)

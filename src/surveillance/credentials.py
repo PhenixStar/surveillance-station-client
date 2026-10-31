@@ -79,12 +79,12 @@ def delete_credentials(profile_name: str) -> None:
         keyring.delete_password(SERVICE_NAME, f"{profile_name}:password")
 
 
-def webhook_token(profile_name: str) -> str | None:
-    """The bearer token for *profile_name*'s webhooks (see
+def webhook_token(url: str) -> str | None:
+    """The bearer token for the webhook target *url* (see
     services.webhooks), or None if there is none or the keyring is
     unavailable or locked."""
     try:
-        return keyring.get_password(SERVICE_NAME, f"{profile_name}:webhook_token")
+        return keyring.get_password(SERVICE_NAME, f"webhook_token:{url}")
     except keyring.errors.KeyringError as e:
         log.debug("No webhook token from the keyring: %s", e)
         return None

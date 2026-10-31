@@ -521,15 +521,15 @@ sidebar for its **Camera Settings**.
 `[webhooks]` is only ever set by hand; `events` defaults to all six and
 `timeout_seconds` to 3. The client reads it when it starts, and on every
 save writes it back as it was then, entries it ignored included, so edit it
-with the client closed. The webhook targets get an `Authorization: Bearer`
-header when the keyring holds a token for the profile logged into, stored
-under the service `surveillance-station` as `<profile>:webhook_token`, the
-same way the login credentials are kept. With the `keyring` command that
-comes with the Python package of that name, for a profile named `home-nas`
-(it prompts for the token):
+with the client closed. A target gets an `Authorization: Bearer` header
+when the keyring holds a token for it, stored under the service
+`surveillance-station` as `webhook_token:` followed by the target URL
+exactly as written in `targets`, the same way the login credentials are
+kept. Each target only ever gets its own token. With the `keyring` command
+that comes with the Python package of that name (it prompts for the token):
 
 ```sh
-python3 -m keyring set surveillance-station home-nas:webhook_token
+python3 -m keyring set surveillance-station webhook_token:http://hub.example:8123/api/webhook/surveillance
 ```
 
 #### Live View stream profile
