@@ -235,6 +235,7 @@ echo "Setting up AppDir structure..."
 mkdir -p "${APPDIR}/usr/lib"
 mkdir -p "${APPDIR}/usr/share/applications"
 mkdir -p "${APPDIR}/usr/share/icons/hicolor/scalable/apps"
+mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
 mkdir -p "${APPDIR}/usr/share/metainfo"
 
 # Copy the entire PyInstaller onedir output into AppDir
@@ -376,6 +377,21 @@ cp "${SCRIPT_DIR}/data/icons/hicolor/scalable/apps/${APP_ID}.svg" \
 
 # Create icon symlink
 ln -sf usr/share/icons/hicolor/scalable/apps/${APP_ID}.svg "${APPDIR}/${APP_ID}.svg"
+
+# appimagetool makes .DirIcon from a PNG or XPM named after Icon= in the
+# top level, and refuses an AppDir that only has the SVG.
+python3 - "${APPDIR}/usr/share/icons/hicolor/scalable/apps/${APP_ID}.svg" \
+    "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${APP_ID}.png" << 'EOF'
+import sys
+
+import gi
+
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import GdkPixbuf
+
+GdkPixbuf.Pixbuf.new_from_file_at_size(sys.argv[1], 256, 256).savev(sys.argv[2], "png", [], [])
+EOF
+ln -sf usr/share/icons/hicolor/256x256/apps/${APP_ID}.png "${APPDIR}/${APP_ID}.png"
 
 # Create metainfo
 cat > "${APPDIR}/usr/share/metainfo/${APP_ID}.metainfo.xml" << 'EOF'
