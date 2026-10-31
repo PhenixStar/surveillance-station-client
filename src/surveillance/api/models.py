@@ -455,24 +455,32 @@ class EMapItem:
 
     @classmethod
     def new_camera(cls, camera_id: int, lng: float, lat: float) -> EMapItem:
-        """A camera marker not yet on the NAS: no id, nothing else known."""
+        """A camera marker not yet on the NAS, with the field-of-view row
+        the web UI sends for a fresh camera marker (emapType 1, a round
+        region of 100 degrees). A row without these fields is silently
+        dropped by Surveillance Station 9.3's Save."""
         return cls(
-            id=0, emap_id=0, emap_type=0, ref_item_type=EMAP_REF_CAMERA,
-            ref_item_id=camera_id, lng=lng, lat=lat,
+            id=0, emap_id=0, emap_type=1, ref_item_type=EMAP_REF_CAMERA,
+            ref_item_id=camera_id, lng=lng, lat=lat, direction=0, view_angle=100,
+            raw={"regionType": 1, "radius": 20000, "vertices": []},
         )  # fmt: skip
 
-    def to_api(self) -> dict[str, Any]:
+    def to_api(self, emap_id: int = 0) -> dict[str, Any]:
         """The row for an Emap Save item list: what Load returned, with
         the referenced item and position as this object has them (a moved
         marker's position wins over the one in raw). An item the NAS has
-        not seen yet sends no id."""
+        not seen yet sends no id and takes *emap_id* as its map."""
         row = dict(self.raw)
         row.update(
+            emapType=self.emap_type,
             refItemIdOnHost=self.ref_item_id,
             refItemType=self.ref_item_type,
             lat=self.lat,
             lng=self.lng,
+            direction=self.direction,
+            viewAngle=self.view_angle,
         )
+        row["emapId"] = self.emap_id or emap_id
         if self.id > 0:
             row["id"] = self.id
         else:
