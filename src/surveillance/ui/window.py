@@ -338,7 +338,7 @@ class MainWindow(Gtk.ApplicationWindow):
             if camera is None:
                 log.warning("No camera with ID %d", request.camera_id)
             else:
-                live.show_camera(camera, fullscreen=request.fullscreen)
+                live.show_camera(camera, solo=request.solo)
         if request.seek is not None:
             live.seek_to(request.seek)
         elif request.live:

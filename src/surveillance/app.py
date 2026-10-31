@@ -72,7 +72,7 @@ class RemoteRequest:
 
     grid: str | None = None
     camera_id: int | None = None
-    fullscreen: bool = False
+    solo: bool = False
     # Unix time, already converted from the --seek argument.
     seek: float | None = None
     live: bool = False
@@ -89,7 +89,7 @@ def parse_remote_request(options: dict[str, object]) -> RemoteRequest | None:
     their own: whether a camera ID exists is up to the window, which has
     the camera list.
     """
-    keys = ("grid", "camera", "fullscreen", "seek", "live", "page")
+    keys = ("grid", "camera", "solo", "seek", "live", "page")
     if not any(key in options for key in keys):
         return None
 
@@ -111,9 +111,9 @@ def parse_remote_request(options: dict[str, object]) -> RemoteRequest | None:
         if not (text.isascii() and text.isdigit()) or int(text) == 0:
             raise ValueError(f"Invalid camera ID {text!r}")
         camera_id = int(text)
-    fullscreen = bool(options.get("fullscreen", False))
-    if fullscreen and camera_id is None:
-        raise ValueError("--fullscreen needs --camera")
+    solo = bool(options.get("solo", False))
+    if solo and camera_id is None:
+        raise ValueError("--solo needs --camera")
 
     seek: float | None = None
     seek_arg = options.get("seek")
@@ -136,7 +136,7 @@ def parse_remote_request(options: dict[str, object]) -> RemoteRequest | None:
     return RemoteRequest(
         grid=grid if isinstance(grid, str) else None,
         camera_id=camera_id,
-        fullscreen=fullscreen,
+        solo=solo,
         seek=seek,
         live=live,
         page=page if isinstance(page, str) else None,
@@ -182,7 +182,7 @@ class SurveillanceApp(Gtk.Application):
         remote_options = [
             ("grid", GLib.OptionArg.STRING, "Switch Live View to a grid layout", "1x1|2x2|3x3|4x4"),
             ("camera", GLib.OptionArg.STRING, "Show a camera in the focused Live View slot", "ID"),
-            ("fullscreen", GLib.OptionArg.NONE, "With --camera: show it alone, in 1x1", None),
+            ("solo", GLib.OptionArg.NONE, "With --camera: show it alone, in 1x1", None),
             ("seek", GLib.OptionArg.STRING, "Play every Live View slot from that time", "TIME"),
             ("live", GLib.OptionArg.NONE, "Return every Live View slot to live", None),
             ("page", GLib.OptionArg.STRING, "Switch to a page", "|".join(REMOTE_PAGES)),

@@ -277,7 +277,7 @@ you are logged in and the camera list has loaded.
 ```sh
 surveillance --grid 3x3                       # switch Live View to a 1x1, 2x2, 3x3 or 4x4 grid
 surveillance --camera 12                      # show camera 12 in the slot the timeline tracks
-surveillance --camera 12 --fullscreen         # show camera 12 alone, in 1x1
+surveillance --camera 12 --solo               # show camera 12 alone, in 1x1
 surveillance --seek 2026-10-30T22:15          # play every slot from that time (local time unless it has a zone)
 surveillance --live                           # return every slot to live
 surveillance --page recordings                # or live, events, snapshots, timelapse, settings
