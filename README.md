@@ -298,7 +298,7 @@ the NAS does not have, like anything else that cannot apply, is noted in
 the log and skipped. Camera IDs are the ones Surveillance Station numbers
 its cameras by, as used in the configuration file.
 
-Debug logs automatically redact passwords, session tokens, and usernames. A debug run also writes one line a minute recording the app's own memory use, open descriptors and thread count, so a long unattended session leaves a trend behind rather than just whatever state it ended in.
+Debug logs automatically redact passwords, session tokens, stream keys, and usernames. A debug run also writes one line a minute recording the app's own memory use, open descriptors and thread count, so a long unattended session leaves a trend behind rather than just whatever state it ended in.
 
 `--log-file` writes at the same level as stderr (WARNING, or DEBUG with
 `--debug`), and additionally captures the traceback of an uncaught exception
