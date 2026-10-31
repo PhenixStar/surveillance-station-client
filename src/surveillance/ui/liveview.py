@@ -3555,8 +3555,10 @@ class LiveView(Gtk.Box):
                 cam_ids.append(cam.id if cam else 0)
             self.app.config.layout_cameras[self._current_layout] = cam_ids
             log.debug("layout_cameras session save: [%s] = %s", self._current_layout, cam_ids)
+            # Only a layout with its cameras known is worth reporting; while
+            # the camera list is still missing the slots are empty anyway.
+            webhooks.note_layout(self._current_layout, cam_ids)
         save_config_now(self.app.config)
-        webhooks.note_layout(self._current_layout, cam_ids)
         # Session changes (assign/clear a slot's camera) can change the
         # layout-accumulated row's own camera set.
         self._request_presence_refresh()
