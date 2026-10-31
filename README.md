@@ -866,6 +866,7 @@ surveillance-station-client/
     ├── test_mpv_env_options.py
     ├── test_mpv_fence_workaround.py
     ├── test_mpv_profiles.py
+    ├── test_remote_actions.py
     ├── test_resource_log.py
     ├── test_rtsp_health.py
     ├── test_services.py
@@ -874,6 +875,7 @@ surveillance-station-client/
     ├── test_transactions.py
     ├── test_ui_behavior.py
     ├── test_update_check.py
+    ├── test_webhooks.py
     └── test_ws_bridge.py
 ```
 </details>
