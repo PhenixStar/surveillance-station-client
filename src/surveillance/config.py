@@ -145,6 +145,9 @@ class WebhookConfig:
     targets: list[str] = field(default_factory=list)
     events: list[str] = field(default_factory=lambda: list(WEBHOOK_EVENTS))
     timeout_seconds: float = DEFAULT_WEBHOOK_TIMEOUT
+    # The section as read, None when there is none. It is what gets
+    # written back, so an entry dropped above stays in the file.
+    section: Any = field(default=None, compare=False, repr=False)
 
 
 @dataclass
@@ -321,7 +324,7 @@ def _webhooks(section: Any) -> WebhookConfig:
     a target that is not an http(s) URL, an event name this client never
     sends, a timeout that is not a positive number of seconds."""
     if not isinstance(section, dict):
-        return WebhookConfig()
+        return WebhookConfig(section=section)
 
     targets: list[str] = []
     raw_targets = section.get("targets", [])
@@ -353,7 +356,7 @@ def _webhooks(section: Any) -> WebhookConfig:
             MAX_WEBHOOK_TIMEOUT,
             DEFAULT_WEBHOOK_TIMEOUT,
         )
-    return WebhookConfig(targets=targets, events=events, timeout_seconds=timeout)
+    return WebhookConfig(targets=targets, events=events, timeout_seconds=timeout, section=section)
 
 
 def _load_theme(general: dict[str, Any]) -> str:
@@ -641,13 +644,9 @@ def _write_config(config: AppConfig) -> None:
         "profiles": {},
     }
 
-    # Only when set: a config that never had the section stays without one.
-    if config.webhooks != WebhookConfig():
-        data["webhooks"] = {
-            "targets": list(config.webhooks.targets),
-            "events": list(config.webhooks.events),
-            "timeout_seconds": config.webhooks.timeout_seconds,
-        }
+    # As it was read, if at all: the section is edited by hand only.
+    if config.webhooks.section is not None:
+        data["webhooks"] = config.webhooks.section
 
     states = dict(config.profile_state)
     states[config.active_profile] = {f: getattr(config, f) for f in PROFILE_STATE_FIELDS}

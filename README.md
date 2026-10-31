@@ -519,7 +519,9 @@ fisheye dewarp, mount and lens can also be configured from the UI: right-click a
 sidebar for its **Camera Settings**.
 
 `[webhooks]` is only ever set by hand; `events` defaults to all six and
-`timeout_seconds` to 3. The webhook targets get an `Authorization: Bearer`
+`timeout_seconds` to 3. The client reads it when it starts, and on every
+save writes it back as it was then, entries it ignored included, so edit it
+with the client closed. The webhook targets get an `Authorization: Bearer`
 header when the keyring holds a token for the profile logged into, stored
 under the service `surveillance-station` as `<profile>:webhook_token`, the
 same way the login credentials are kept. With the `keyring` command that

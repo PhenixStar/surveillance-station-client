@@ -658,8 +658,32 @@ class TestWebhooks:
         config.webhooks = WebhookConfig(
             targets=["http://127.0.0.1:8790/client-event"], events=["alert"], timeout_seconds=2.5
         )
+        config.webhooks.section = {
+            "targets": ["http://127.0.0.1:8790/client-event"],
+            "events": ["alert"],
+            "timeout_seconds": 2.5,
+        }
         _write_config(config)
         assert load_config().webhooks == config.webhooks
+
+    def test_written_back_as_read(self, tmp_path: Path, monkeypatch: object) -> None:
+        """What the client cannot use stays in the file, for the user to fix."""
+        import surveillance.config as cfg
+
+        config_file = tmp_path / "config.toml"
+        monkeypatch.setattr(cfg, "CONFIG_FILE", config_file)  # type: ignore[attr-defined]
+        monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)  # type: ignore[attr-defined]
+
+        section = {
+            "targets": ["https://hub.example/hook", "hub.local:8123/hook"],
+            "events": ["alert", "camera_ofline"],
+            "timeout_seconds": 60,
+        }
+        config = _config_from_data({"webhooks": section})
+        assert config.webhooks.events == ["alert"]
+        _write_config(config)
+        with open(config_file, "rb") as f:
+            assert tomllib.load(f)["webhooks"] == section
 
     def test_left_out_of_a_config_that_has_none(self, tmp_path: Path, monkeypatch: object) -> None:
         import surveillance.config as cfg
