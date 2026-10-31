@@ -2967,6 +2967,31 @@ class TestHistoryTailRefresh:
             with contextlib.suppress(asyncio.CancelledError):
                 await watch
 
+    async def test_a_failed_lookup_does_not_end_the_watching(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ws_bridge, "_HISTORY_TAIL_REFRESH_INTERVAL", 0.01)
+        rec = _recording()
+        grown = _recording(stop_time=rec.stop_time + 600)
+        answers: list[Any] = [ConnectionError("NAS busy"), grown]
+
+        async def resolver(target: int) -> Recording:
+            answer = answers.pop(0) if len(answers) > 1 else answers[0]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        bridge = self._bridge(rec, rec.stop_time - 5, resolver)
+        watch = asyncio.create_task(bridge._watch_history_tail())
+        try:
+            await _wait_until(lambda: bridge._history_recording is grown or watch.done())
+            assert not watch.done(), "one failed lookup ended the watcher"
+            assert bridge._history_recording is grown
+        finally:
+            watch.cancel()
+            with contextlib.suppress(asyncio.CancelledError, ConnectionError):
+                await watch
+
     async def test_does_not_ask_while_there_is_recording_left(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

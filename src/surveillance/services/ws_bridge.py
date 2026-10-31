@@ -2197,7 +2197,14 @@ class WebSocketBridge:
             target = self._current_history_target()
             if rec.stop_time - target > _HISTORY_TAIL_MARGIN:
                 continue  # still well inside the recording, nothing to ask
-            fresh = await resolver(target)
+            try:
+                fresh = await resolver(target)
+            except Exception as exc:
+                # A NAS that did not answer this time may next time.
+                # Raised, it ended this task, and nothing watched the
+                # tail again for the rest of the stream.
+                log.debug("WebSocket bridge for %s: recording lookup failed: %s", self._label, exc)
+                continue
             if self._history_recording is not rec:
                 # A seek moved playback to another recording while the
                 # lookup was out; this answer is about the old one.
