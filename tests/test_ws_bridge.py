@@ -1304,6 +1304,33 @@ class TestAudioMuxDecision:
         assert bridge._aac.use_header_prepend is False
         await bridge.stop()
 
+    async def test_aac_detected_on_a_live_bridge_started_paused(
+        self, connect: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Live View pauses a bridge started under its Pause before the
+        first frame. Dropping frames then starved detection, and the
+        camera played video only for the rest of the bridge."""
+
+        async def _fake_subprocess_exec(*args: Any, **kwargs: Any) -> Any:
+            if "null" in args:
+                return _FakeValidationProc(stderr=b"")
+            return await _spawn_fake_mux_holder(**kwargs)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess_exec)
+        monkeypatch.setattr(ws_bridge, "_AAC_DETECTION_TIMEOUT", 1.0)
+        frames = [_frame(b"vdoCodec=H264&adoCodec=MPEG4-GENERIC", b"")]
+        frames += [_aac_audio_frame() for _ in range(6)]
+        frames += _AAC_DETECTION_PADDING
+        connect(_FakeWS(frames, hang=True))
+
+        bridge = WebSocketBridge("wss://nas/stream", False, "sid")
+        bridge.request_pause()
+        await bridge.pause()
+        await bridge.start()
+        assert bridge.audio_active is True
+        assert bridge._ffmpeg_proc is not None
+        await bridge.stop()
+
     async def test_mux_active_when_the_frame_is_split_across_the_header(
         self, connect: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:

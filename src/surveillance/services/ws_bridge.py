@@ -1321,7 +1321,12 @@ class WebSocketBridge:
         every frame of every camera.
         """
         media_type = fields.get("mediaType")
-        if self._paused and not self.is_history:
+        # Not while AAC detection is still collecting: a bridge started
+        # under a Live View pause would otherwise see no audio, give up
+        # on it at the deadline and play video only for good. What
+        # detection buffers is flushed through _write_pipe, which drops
+        # it while paused, so no pipe fills behind the pause.
+        if self._paused and not self.is_history and not self._aac.detecting:
             self._discard_paused_frame(media_type)
             return
         if media_type == "1":
