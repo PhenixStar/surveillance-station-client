@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -340,3 +342,33 @@ class TestService:
         assert not emaps_unavailable(ApiError(119))
         assert not emaps_unavailable(httpx.ConnectError("down"))
         assert emaps_unavailable(SessionExpiredError("relogin failed"))
+
+
+class TestLoadErrorMessage:
+    @staticmethod
+    def _page() -> SimpleNamespace:
+        shown: list[str] = []
+        return SimpleNamespace(
+            _refresh_btn=MagicMock(),
+            listbox=MagicMock(),
+            _unavailable=False,
+            _listed=True,
+            shown=shown,
+            _show_message=shown.append,
+        )
+
+    def test_a_failed_relogin_says_so(self) -> None:
+        from surveillance.ui.emaps import EMapsView
+
+        page = self._page()
+        EMapsView._on_load_error(page, SessionExpiredError("relogin failed"))  # type: ignore[arg-type]
+        assert page._unavailable
+        assert "logging in to the NAS again failed" in page.shown[0]
+
+    def test_no_privilege_says_unavailable(self) -> None:
+        from surveillance.ui.emaps import EMapsView
+
+        page = self._page()
+        EMapsView._on_load_error(page, ApiError(105))  # type: ignore[arg-type]
+        assert page._unavailable
+        assert page.shown[0].startswith("E-Maps are not available")
