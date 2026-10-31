@@ -101,19 +101,25 @@ class _Target:
                 self.overflowing = True
         self.queue.put_nowait(payload)
 
-    async def run(self, client: httpx.AsyncClient) -> None:
+    async def run(self, client: httpx.AsyncClient, timeout: float) -> None:
         while True:
             payload = await self.queue.get()
             try:
-                await self._post(client, payload)
+                await self._post(client, payload, timeout)
             finally:
                 self.queue.task_done()
             if self.queue.empty():
                 self.overflowing = False
 
-    async def _post(self, client: httpx.AsyncClient, payload: dict[str, Any]) -> None:
+    async def _post(
+        self, client: httpx.AsyncClient, payload: dict[str, Any], timeout: float
+    ) -> None:
         try:
-            response = await client.post(self.url, json=payload, headers=self.headers)
+            # On the whole POST: httpx's own timeout limits each wait on
+            # the network, so a receiver answering a byte at a time held
+            # this target's queue up for as long as it liked.
+            async with asyncio.timeout(timeout):
+                response = await client.post(self.url, json=payload, headers=self.headers)
             response.raise_for_status()
         except Exception as e:
             # The type and status only: an exception's text quotes the
@@ -183,7 +189,8 @@ class WebhookDispatcher:
                     if token:
                         target.headers = {"Authorization": f"Bearer {token}"}
                 async with httpx.AsyncClient(timeout=self._settings.timeout_seconds) as client:
-                    await asyncio.gather(*(target.run(client) for target in self._targets))
+                    timeout = self._settings.timeout_seconds
+                    await asyncio.gather(*(target.run(client, timeout) for target in self._targets))
             except Exception:
                 log.exception("Webhooks stopped")
 

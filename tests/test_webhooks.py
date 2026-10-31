@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import re
 from collections.abc import AsyncIterator, Iterator
@@ -181,6 +182,39 @@ class TestDelivery:
             dispatcher.emit("alert")
             await dispatcher.wait_idle()
         assert caplog.text.count("takes events again") == 1
+
+    async def test_timeout_seconds_caps_the_whole_post(
+        self, make_dispatcher: object, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """httpx's timeout is per network wait. A receiver answering a byte
+        at a time stayed under it and held the target for as long as it
+        liked, while the docs promise at most timeout_seconds."""
+
+        async def _drip(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\n")
+            with contextlib.suppress(ConnectionError):
+                for _ in range(6):
+                    await writer.drain()
+                    await asyncio.sleep(0.15)
+                    writer.write(b"x")
+                writer.close()
+
+        server = await asyncio.start_server(_drip, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        try:
+            dispatcher = make_dispatcher(  # type: ignore[operator]
+                [f"http://127.0.0.1:{port}/hook"], timeout_seconds=0.3
+            )
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            dispatcher.emit("alert")
+            await dispatcher.wait_idle()
+            took = loop.time() - started
+        finally:
+            server.close()
+        assert "failed on alert (TimeoutError)" in caplog.text
+        assert took < 0.8
 
     async def test_a_target_down_does_not_hold_up_another(self, make_dispatcher: object) -> None:
         release = asyncio.Event()
