@@ -181,6 +181,21 @@ Choose which Surveillance Station stream profile Live View plays (see [Live View
 Grid layout, active page, camera assignments, sidebar and timeline visibility, per-camera volume, mute, stream protocol and Live View stream profile, and the search filters of each browser page (including time presets) are restored on restart. Critical changes are flushed to disk immediately for crash resilience.
 </details>
 <details>
+<summary><b>Outgoing Webhooks</b></summary>
+
+Off unless configured: the client can POST what it sees to other systems, a home automation hub or an alerting bot, as JSON `{event, profile, camera_id, camera_name, at, detail}`. The events are `alert` (the unread notification count went up), `camera_offline` and `camera_online` (a camera's status changed at a camera list poll), `home_mode` (switched on or off, seen at the next home mode poll), `snapshot_saved` (taken from a Live View slot) and `layout_changed` (Live View's grid or the camera in one of its slots changed, with the camera ID in each slot). `camera_id` is 0 and `camera_name` empty for an event that is not about one camera, and `at` is UTC.
+
+| Event | `detail` |
+|---|---|
+| `alert` | `{"unread": 4, "new": 2}`: the unread count and how much it went up |
+| `camera_offline`, `camera_online` | `{"status": "disconnected"}`: the camera's new status |
+| `home_mode` | `{"enabled": true}` |
+| `snapshot_saved` | `{"snapshot_id": 7}`: the snapshot's ID on the NAS |
+| `layout_changed` | `{"grid": "2x2", "cameras": [12, 3, 0, 0]}`: the camera ID in each slot, 0 for an empty one |
+
+Sending never holds up the window: each target has a queue of its own that drops its oldest event when the target falls behind, and a target that fails is logged once, not once per event. The targets go in the `[webhooks]` section of the configuration file, below; an optional bearer token is read from the keyring, never from the file.
+</details>
+<details>
 <summary><b>Two-Factor Authentication</b></summary>
 
 MFA/OTP login support. When 2FA is enabled on your Synology account, the client prompts for a 6-digit authenticator code and optionally registers as a trusted device to skip OTP on future logins.
@@ -384,6 +399,12 @@ last_page = "live"             # last active page
 # Same, for the Settings page's dropdowns.
 # live_view_stream_profile = "low"  # camera (default), high, balanced, low
 
+[webhooks]
+# Off without targets. Each event is POSTed as JSON to every target.
+# targets = ["http://127.0.0.1:8790/client-event"]
+# events = ["alert", "camera_offline", "camera_online", "home_mode", "snapshot_saved", "layout_changed"]
+# timeout_seconds = 3   # per POST, at most 30
+
 [profiles.home-nas]
 host = "192.168.1.100"
 port = 5001
@@ -476,6 +497,18 @@ from an earlier version kept one shared set at the top level and in
 Stream protocols, direct RTSP overrides, Live View stream profiles and the
 fisheye dewarp, mount and lens can also be configured from the UI: right-click a camera in the
 sidebar for its **Camera Settings**.
+
+`[webhooks]` is only ever set by hand; `events` defaults to all six and
+`timeout_seconds` to 3. The webhook targets get an `Authorization: Bearer`
+header when the keyring holds a token for the profile logged into, stored
+under the service `surveillance-station` as `<profile>:webhook_token`, the
+same way the login credentials are kept. With the `keyring` command that
+comes with the Python package of that name, for a profile named `home-nas`
+(it prompts for the token):
+
+```sh
+python3 -m keyring set surveillance-station home-nas:webhook_token
+```
 
 #### Live View stream profile
 
@@ -760,7 +793,8 @@ surveillance-station-client/
 │   │   ├── transactions.py              POS transactions (receipt overlay)
 │   │   ├── license.py                   license management
 │   │   ├── timelapse.py                 time lapse management
-│   │   └── update_check.py              GitHub release version check
+│   │   ├── update_check.py              GitHub release version check
+│   │   └── webhooks.py                  outgoing webhooks (client events)
 │   ├── ui/
 │   │   ├── window.py                    main window
 │   │   ├── about.py                     About page

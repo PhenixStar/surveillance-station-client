@@ -31,10 +31,13 @@ import tomllib
 from pathlib import Path
 
 from surveillance.config import (
+    DEFAULT_WEBHOOK_TIMEOUT,
     MIN_POLL_INTERVAL,
+    WEBHOOK_EVENTS,
     AppConfig,
     ConnectionProfile,
     EventTypeHistory,
+    WebhookConfig,
     _config_from_data,
     _write_config,
     add_profile,
@@ -591,3 +594,80 @@ class TestCameraVolumeRange:
             _in_profile({"camera_volume": {"1": 250, "2": -20, "3": 40, "4": "loud"}})
         )
         assert cfg.camera_volume == {1: 100, 2: 0, 3: 40}
+
+
+class TestWebhooks:
+    """[webhooks]: off unless it names targets, and read defensively,
+    since it is only ever written by hand."""
+
+    def test_off_by_default(self) -> None:
+        assert _config_from_data({}).webhooks == WebhookConfig()
+        assert WebhookConfig().targets == []
+
+    def test_loads_values(self) -> None:
+        cfg = _config_from_data(
+            {
+                "webhooks": {
+                    "targets": ["http://127.0.0.1:8790/client-event"],
+                    "events": ["alert", "home_mode"],
+                    "timeout_seconds": 5,
+                }
+            }
+        )
+        assert cfg.webhooks == WebhookConfig(
+            targets=["http://127.0.0.1:8790/client-event"],
+            events=["alert", "home_mode"],
+            timeout_seconds=5.0,
+        )
+
+    def test_events_default_to_all(self) -> None:
+        cfg = _config_from_data({"webhooks": {"targets": ["https://127.0.0.1/hook"]}})
+        assert cfg.webhooks.events == list(WEBHOOK_EVENTS)
+
+    def test_unusable_entries_are_dropped(self) -> None:
+        cfg = _config_from_data(
+            {
+                "webhooks": {
+                    "targets": ["ftp://127.0.0.1/x", 42, "http://127.0.0.1:8790/ok"],
+                    "events": ["alert", "door_opened"],
+                    "timeout_seconds": 0,
+                }
+            }
+        )
+        assert cfg.webhooks.targets == ["http://127.0.0.1:8790/ok"]
+        assert cfg.webhooks.events == ["alert"]
+        assert cfg.webhooks.timeout_seconds == DEFAULT_WEBHOOK_TIMEOUT
+
+    def test_bad_timeouts_fall_back_to_the_default(self) -> None:
+        for timeout in (-1, "3", True, 1000, float("nan")):
+            cfg = _config_from_data({"webhooks": {"timeout_seconds": timeout}})
+            assert cfg.webhooks.timeout_seconds == DEFAULT_WEBHOOK_TIMEOUT
+
+    def test_not_a_table_is_off(self) -> None:
+        cfg = _config_from_data({"webhooks": "http://127.0.0.1/x"})
+        assert cfg.webhooks == WebhookConfig()
+
+    def test_round_trips_through_save_and_load(self, tmp_path: Path, monkeypatch: object) -> None:
+        import surveillance.config as cfg
+
+        config_file = tmp_path / "config.toml"
+        monkeypatch.setattr(cfg, "CONFIG_FILE", config_file)  # type: ignore[attr-defined]
+        monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)  # type: ignore[attr-defined]
+
+        config = AppConfig()
+        config.webhooks = WebhookConfig(
+            targets=["http://127.0.0.1:8790/client-event"], events=["alert"], timeout_seconds=2.5
+        )
+        _write_config(config)
+        assert load_config().webhooks == config.webhooks
+
+    def test_left_out_of_a_config_that_has_none(self, tmp_path: Path, monkeypatch: object) -> None:
+        import surveillance.config as cfg
+
+        config_file = tmp_path / "config.toml"
+        monkeypatch.setattr(cfg, "CONFIG_FILE", config_file)  # type: ignore[attr-defined]
+        monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)  # type: ignore[attr-defined]
+
+        _write_config(AppConfig())
+        with open(config_file, "rb") as f:
+            assert "webhooks" not in tomllib.load(f)

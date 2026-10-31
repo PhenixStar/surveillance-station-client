@@ -38,6 +38,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, GLib, Gtk  # type: ignore[import-untyped]
 
 from surveillance.api.models import Camera
+from surveillance.services import webhooks
 from surveillance.ui.headerbar import AppHeaderBar
 from surveillance.ui.layouts import valid_layout
 from surveillance.ui.sidebar import CameraSidebar
@@ -213,6 +214,8 @@ class MainWindow(Gtk.ApplicationWindow):
     def on_connected(self) -> None:
         """Called after successful login."""
         self.headerbar.set_connected(True)
+        if self.app.api:
+            webhooks.start(self.app.config.webhooks, self.app.api.profile.name)
         self._setup_content_pages()
         self.sidebar.refresh(on_complete=self._restore_live_session)
         self.sidebar.start_polling()
@@ -304,8 +307,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.stack.remove(old)
             widget = widget_class(self)
             self.stack.add_named(widget, name)
-            if name == "live" and hasattr(widget, "sync_camera_statuses"):
-                self.sidebar.on_cameras_updated = widget.sync_camera_statuses
+        self.sidebar.on_cameras_updated = self._on_cameras_updated
 
         # Restore last active page
         last_page = self.app.config.last_page
@@ -324,6 +326,21 @@ class MainWindow(Gtk.ApplicationWindow):
             live_view = self.stack.get_child_by_name("live")
             if live_view and hasattr(live_view, "pause_streams"):
                 live_view.pause_streams()
+
+    def _on_cameras_updated(self, cameras: list[Camera]) -> None:
+        """After every camera list refresh, the periodic poll included."""
+        live_view = self.stack.get_child_by_name("live")
+        if live_view and hasattr(live_view, "sync_camera_statuses"):
+            live_view.sync_camera_statuses(cameras)
+        webhooks.note_cameras(cameras)
+
+    def _on_home_mode(self, on: bool) -> None:
+        self.headerbar.set_home_mode(on)
+        webhooks.note_home_mode(on)
+
+    def _on_unread_alerts(self, count: int) -> None:
+        self.headerbar.set_notification_count(count)
+        webhooks.note_unread_alerts(count)
 
     def _start_polling(self) -> None:
         """Start background polling for alerts and home mode."""
@@ -357,7 +374,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
             run_async(
                 get_homemode(self.app.api),
-                callback=lambda info: self.headerbar.set_home_mode(info.on),
+                callback=lambda info: self._on_home_mode(info.on),
                 error_callback=_homemode_error,
             )
             return True
@@ -387,7 +404,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
             run_async(
                 count_unread_alerts(self.app.api),
-                callback=self.headerbar.set_notification_count,
+                callback=self._on_unread_alerts,
                 error_callback=_alerts_error,
             )
             return True
@@ -518,6 +535,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def on_disconnected(self) -> None:
         """Clean up when disconnected (logout/quit)."""
+        webhooks.stop()
         self.sidebar.stop_polling()
         self.sidebar.clear()
         self._stop_polling()
