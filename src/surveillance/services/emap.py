@@ -302,7 +302,7 @@ class EMapService:
                 "This E-Map's markers changed on the NAS since it was loaded; "
                 "reload it and make the changes again"
             )
-        payload = {"list": [item.to_api() for item in items] + list(current.extra_rows)}
+        payload = {"list": [item.to_api(emap_id) for item in items] + list(current.extra_rows)}
         await self._save(emap_id, items=json.dumps(payload))
         self._maps.pop(emap_id, None)
 

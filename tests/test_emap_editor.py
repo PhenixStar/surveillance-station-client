@@ -245,9 +245,24 @@ class TestItemRoundTrip:
         assert (row["lng"], row["lat"]) == (0.9, 0.1)
 
     def test_a_new_marker_sends_no_id(self) -> None:
-        row = EMapItem.new_camera(42, 0.5, 0.5).to_api()
+        row = EMapItem.new_camera(42, 0.5, 0.5).to_api(7)
         assert "id" not in row
-        assert row == {"refItemIdOnHost": 42, "refItemType": 0, "lat": 0.5, "lng": 0.5}
+        # The field-of-view fields are what the NAS needs to keep the row
+        # at all: without them Save answered success and stored nothing
+        # (Surveillance Station 9.3, checked on a scratch map).
+        assert row == {
+            "emapId": 7,
+            "emapType": 1,
+            "refItemIdOnHost": 42,
+            "refItemType": 0,
+            "lat": 0.5,
+            "lng": 0.5,
+            "direction": 0,
+            "viewAngle": 100,
+            "regionType": 1,
+            "radius": 20000,
+            "vertices": [],
+        }
 
     def test_raw_is_not_part_of_equality(self) -> None:
         a = EMapItem.new_camera(1, 0.5, 0.5)
@@ -275,7 +290,8 @@ class TestSaveMarkers:
         # the client could not parse: Save replaces the list.
         assert [r.get("id") for r in rows] == [11, 12, 13, None, 14, 15]
         assert rows[0]["radius"] == 20000
-        assert rows[3] == {"refItemIdOnHost": 42, "refItemType": 0, "lat": 0.5, "lng": 0.5}
+        assert rows[3] == EMapItem.new_camera(42, 0.5, 0.5).to_api(1)
+        assert rows[3]["emapId"] == 1 and rows[3]["viewAngle"] == 100
         assert rows[4:] == LOAD_DATA["emap"][0]["item"][3:]
         assert not service._maps
 
