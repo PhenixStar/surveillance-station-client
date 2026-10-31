@@ -70,6 +70,8 @@ class RemoteRequest:
     the order the fields are listed here.
     """
 
+    # Name of a [layout_presets."<name>"] entry; applied before grid.
+    preset: str | None = None
     grid: str | None = None
     camera_id: int | None = None
     fullscreen: bool = False
@@ -89,13 +91,15 @@ def parse_remote_request(options: dict[str, object]) -> RemoteRequest | None:
     their own: whether a camera ID exists is up to the window, which has
     the camera list.
     """
-    keys = ("grid", "camera", "fullscreen", "seek", "live", "page")
+    keys = ("preset", "grid", "camera", "fullscreen", "seek", "live", "page")
     if not any(key in options for key in keys):
         return None
 
-    # A named layout preset would be resolved here too, into its grid and
-    # cameras, once the configuration has presets: --preset NAME then
-    # becomes one more option feeding the same request.
+    # Presets are named in config.toml, so only the window can tell
+    # whether one exists; here the name just has to be a non-empty string.
+    preset = options.get("preset")
+    if preset is not None and (not isinstance(preset, str) or not preset.strip()):
+        raise ValueError("--preset needs a name")
     grid = options.get("grid")
     if grid is not None and grid not in LAYOUT_VISIBLE:
         raise ValueError(f"Unknown grid {grid!r}, expected one of {', '.join(LAYOUT_VISIBLE)}")
@@ -126,6 +130,7 @@ def parse_remote_request(options: dict[str, object]) -> RemoteRequest | None:
         raise ValueError(f"Unknown page {page!r}, expected one of {', '.join(REMOTE_PAGES)}")
 
     return RemoteRequest(
+        preset=preset.strip() if isinstance(preset, str) else None,
         grid=grid if isinstance(grid, str) else None,
         camera_id=camera_id if isinstance(camera_id, int) else None,
         fullscreen=fullscreen,
@@ -172,6 +177,7 @@ class SurveillanceApp(Gtk.Application):
         # already running, or by this one once logged in. See
         # do_command_line.
         remote_options = [
+            ("preset", GLib.OptionArg.STRING, "Switch Live View to a named layout preset", "NAME"),
             ("grid", GLib.OptionArg.STRING, "Switch Live View to a grid layout", "1x1|2x2|3x3|4x4"),
             ("camera", GLib.OptionArg.INT, "Show a camera in the focused Live View slot", "ID"),
             ("fullscreen", GLib.OptionArg.NONE, "With --camera: show it alone, in 1x1", None),

@@ -326,7 +326,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _run_remote_request(self, request: RemoteRequest) -> None:
         wants_live_view = (
-            request.grid is not None
+            request.preset is not None
+            or request.grid is not None
             or request.camera_id is not None
             or request.seek is not None
             or request.live
@@ -346,6 +347,13 @@ class MainWindow(Gtk.ApplicationWindow):
     def _run_live_view_request(self, live: LiveView, request: RemoteRequest) -> None:
         if self.stack.get_visible_child_name() != "live":
             self.show_page("live")
+        if request.preset is not None:
+            preset = self.app.config.layout_presets.get(request.preset)
+            if preset is None:
+                log.warning("No layout preset named %r", request.preset)
+            elif hasattr(live, "apply_preset"):
+                live.apply_preset(preset.grid, preset.cameras)
+                self.sync_grid_layout(preset.grid)
         if request.grid is not None:
             # Through the action, like the header bar's grid menu, so the
             # menu shows the new layout too.

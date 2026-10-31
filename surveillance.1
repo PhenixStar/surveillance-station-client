@@ -5,6 +5,8 @@ surveillance \- Synology Surveillance Station client
 .B surveillance
 .RB [ \-\-debug ]
 .RB [ \-\-log\-file [\fB=\fPPATH]]
+.RB [ \-\-preset
+.IR NAME ]
 .RB [ \-\-grid
 .IR LAYOUT ]
 .RB [ \-\-camera
@@ -338,6 +340,11 @@ The Live View options switch to Live View first. Combined, they apply in
 the order grid, camera, seek or live, then page. Anything that cannot
 apply, such as a camera ID the NAS does not have, is noted in the log and
 skipped.
+.TP
+.BI \-\-preset " NAME"
+Switch Live View to the named layout preset from
+.BR config.toml ,
+its grid and cameras; an unknown name is logged and skipped.
 .TP
 .BI \-\-grid " LAYOUT"
 Switch Live View to the

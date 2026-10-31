@@ -280,6 +280,7 @@ status 2 if an option is malformed. A first launch carries them out once
 you are logged in and the camera list has loaded.
 
 ```sh
+surveillance --preset "Front of house"        # switch Live View to a named layout preset from config.toml
 surveillance --grid 3x3                       # switch Live View to a 1x1, 2x2, 3x3 or 4x4 grid
 surveillance --camera 12                      # show camera 12 in the slot the timeline tracks
 surveillance --camera 12 --fullscreen         # show camera 12 alone, in 1x1
@@ -289,7 +290,7 @@ surveillance --page recordings                # or live, events, snapshots, time
 ```
 
 The Live View options switch to Live View first. Several can be combined
-and apply in the order grid, camera, seek or live, then page. A camera ID
+and apply in the order preset, grid, camera, seek or live, then page. A camera ID
 the NAS does not have, like anything else that cannot apply, is noted in
 the log and skipped. Camera IDs are the ones Surveillance Station numbers
 its cameras by, as used in the configuration file.

@@ -36,6 +36,7 @@ import pytest
 
 from surveillance.api.models import Camera
 from surveillance.app import RemoteRequest, SurveillanceApp, parse_remote_request
+from surveillance.config import LayoutPreset
 from surveillance.ui.liveview import LiveView
 from surveillance.ui.window import MainWindow
 
@@ -50,6 +51,15 @@ class TestParseRemoteRequest:
         )
         assert request == RemoteRequest(grid="3x3", camera_id=12, fullscreen=True, page="events")
         assert parse_remote_request({"live": True}) == RemoteRequest(live=True)
+
+    def test_preset_name_is_kept(self) -> None:
+        assert parse_remote_request({"preset": " Front of house "}) == RemoteRequest(
+            preset="Front of house"
+        )
+
+    def test_preset_needs_a_name(self) -> None:
+        with pytest.raises(ValueError, match="--preset needs a name"):
+            parse_remote_request({"preset": "  "})
 
     def test_seek_with_zone(self) -> None:
         request = parse_remote_request({"seek": "2026-10-30T22:15:00Z"})
@@ -131,6 +141,12 @@ def _window(*, ready: bool = True, visible: str = "live", pages: tuple[str, ...]
         sidebar=SimpleNamespace(cameras=[_camera(3), _camera(12)]),
         _grid_layout_action=MagicMock(),
         show_page=MagicMock(),
+        sync_grid_layout=MagicMock(),
+        app=SimpleNamespace(
+            config=SimpleNamespace(
+                layout_presets={"Front of house": LayoutPreset(grid="2x2", cameras=[3, 12, 0, 0])}
+            )
+        ),
         live=live,
     )
     window._run_remote_request = lambda r: MainWindow._run_remote_request(window, r)
@@ -140,6 +156,19 @@ def _window(*, ready: bool = True, visible: str = "live", pages: tuple[str, ...]
 
 
 class TestApplyRemoteRequest:
+    def test_preset_applies_its_grid_and_cameras(self) -> None:
+        window = _window()
+        window.apply_remote_request(RemoteRequest(preset="Front of house"))
+        window.live.apply_preset.assert_called_once_with("2x2", [3, 12, 0, 0])
+        window.sync_grid_layout.assert_called_once_with("2x2")
+
+    def test_unknown_preset_is_skipped(self, caplog: pytest.LogCaptureFixture) -> None:
+        window = _window()
+        window.apply_remote_request(RemoteRequest(preset="Nope", live=True))
+        window.live.apply_preset.assert_not_called()
+        window.live.return_to_live.assert_called_once()
+        assert "No layout preset named 'Nope'" in caplog.text
+
     def test_grid_goes_through_the_layout_action(self) -> None:
         window = _window()
         window.apply_remote_request(RemoteRequest(grid="4x4"))
