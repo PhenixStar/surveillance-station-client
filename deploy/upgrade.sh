@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Upgrade a from-source install to the newest commit of its branch (default mce) or to a tag.
+# Upgrade a from-source install to the newest commit of its branch (default als) or to a tag.
 #
-#   deploy/upgrade.sh [--check] [--tag v0.16.0-mce.1]
+#   deploy/upgrade.sh [--check] [--tag v0.16.0-als.1]
 #
 # Refuses while the app runs (single-instance GApplication: a running copy keeps the old code),
 # backs up config.toml, pulls fast-forward only, prints dependency changes from pyproject.toml
@@ -10,7 +10,7 @@ set -euo pipefail
 
 PREFIX="${SS_CLIENT_PREFIX:-$HOME/.local/opt/surveillance-station-client}"
 SRC="$PREFIX/src"
-BRANCH="${SS_CLIENT_BRANCH:-mce}"
+BRANCH="${SS_CLIENT_BRANCH:-als}"
 CHECK=0; TAG=""
 while [ $# -gt 0 ]; do
   case "$1" in

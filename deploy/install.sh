@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# From-source install of the Surveillance Station client (mce branch) for one user on Linux.
+# From-source install of the Surveillance Station client (als branch) for one user on Linux.
 # Idempotent: re-running updates the checkout and reinstalls into the same venv.
 #
-#   deploy/install.sh [--branch mce] [--prefix ~/.local/opt/surveillance-station-client]
+#   deploy/install.sh [--branch als] [--prefix ~/.local/opt/surveillance-station-client]
 #
 # Needs the system GTK4 stack (PyGObject, pycairo, gir1.2-gtk-4.0), libmpv and portaudio:
 #   Debian/Ubuntu: sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 libmpv2 libportaudio2 python3-venv
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/PhenixStar/surveillance-station-client"
-BRANCH="${SS_CLIENT_BRANCH:-mce}"
+BRANCH="${SS_CLIENT_BRANCH:-als}"
 PREFIX="${SS_CLIENT_PREFIX:-$HOME/.local/opt/surveillance-station-client}"
 while [ $# -gt 0 ]; do
   case "$1" in

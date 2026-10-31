@@ -20,7 +20,7 @@ port = 443
 https = true
 verify_ssl = true
 
-# Named layout presets (mce branch): listed under "Presets" in the Live View grid menu.
+# Named layout presets (als branch): listed under "Presets" in the Live View grid menu.
 # cameras = Surveillance Station camera ids in tile order; 0 = empty tile.
 [layout_presets."Front of house"]
 grid = "2x2"
