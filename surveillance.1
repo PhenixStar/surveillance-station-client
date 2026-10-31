@@ -242,6 +242,14 @@ click-and-drag panning.
 .B Time Lapse
 Browse, play back, download, and manage Smart Time Lapse recordings.
 .TP
+.B Maps
+Show the E-Maps set up in Surveillance Station, read only, with a dot for
+every camera placed on a map: green while the camera is enabled, red when it
+is disconnected or disabled, grey for one the account cannot see. Hovering a
+dot names the camera, and clicking it puts the camera in Live View the way a
+click in the camera sidebar does. PNG, JPEG and SVG map images are drawn.
+Maps are created and edited in Surveillance Station itself.
+.TP
 .B Events
 Browse real events with their type and time, filtered by event type, camera,
 and time range. On Surveillance Station 9.3 and later, events and their types
@@ -425,6 +433,8 @@ per layout
 .RI ( layout_cameras ),
 the cameras picked for searches
 .RI ( search_camera_ids ", " events_search_camera_ids ", " snapshots_search_camera_ids ),
+the E-Map last opened on the Maps page
+.RI ( last_emap_id ),
 and the sections below. A config from an earlier version kept one shared
 set at the top level and in
 .BR [session] ;
