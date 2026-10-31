@@ -30,6 +30,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from surveillance.config import (
     DEFAULT_WEBHOOK_TIMEOUT,
     MIN_POLL_INTERVAL,
@@ -614,6 +616,42 @@ class TestSearchPresetValidation:
 
         cfg = AppConfig(snapshots_search_time_preset="last7d")
         assert load_search_filters(cfg, "snapshots_search")[3] == "last7d"
+
+
+class TestSearchTimeRoundTrip:
+    @pytest.mark.parametrize("fold", [0, 1])
+    def test_the_repeated_hour_comes_back_as_saved(
+        self, fold: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When summer time ends, 02:30 happens twice. Saved without its
+        offset, the second one came back as the first, an hour early."""
+        import time
+        from datetime import datetime
+
+        from surveillance import config
+        from surveillance.config import load_search_filters, save_search_filters
+
+        monkeypatch.setattr(config, "save_config", lambda cfg: None)
+        monkeypatch.setenv("TZ", "Europe/Brussels")
+        time.tzset()
+        try:
+            ts = int(datetime(2026, 10, 25, 2, 30, fold=fold).timestamp())
+            cfg = AppConfig()
+            save_search_filters(cfg, "search", None, ts, ts + 60, "")
+            _ids, from_time, to_time, _preset = load_search_filters(cfg, "search")
+        finally:
+            monkeypatch.undo()
+            time.tzset()
+        assert (from_time, to_time) == (ts, ts + 60)
+
+    def test_a_time_saved_without_an_offset_still_loads(self) -> None:
+        from datetime import datetime
+
+        from surveillance.config import load_search_filters
+
+        cfg = AppConfig(search_from_time="2026-02-01T00:00:00")
+        expected = int(datetime(2026, 2, 1).timestamp())
+        assert load_search_filters(cfg, "search")[1] == expected
 
 
 class TestCameraVolumeRange:

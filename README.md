@@ -408,8 +408,8 @@ last_page = "live"             # last active page
 
 # Recording search filters (persisted from last search); the cameras
 # picked for them are kept per profile, see below
-# search_from_time = "2026-02-01T00:00:00"
-# search_to_time = "2026-02-19T23:59:59"
+# search_from_time = "2026-02-01T00:00:00+01:00"
+# search_to_time = "2026-02-19T23:59:59+01:00"
 # search_time_preset = "today"  # "today", "yesterday", "last24h", "last7d", "last30d", or ""
 
 [setting_overrides]

@@ -741,17 +741,16 @@ def save_search_filters(
     time_preset: str,
 ) -> None:
     """Persist advanced-search filters to the same `{prefix}_*` AppConfig
-    fields load_search_filters() reads, and write the config to disk."""
+    fields load_search_filters() reads, and write the config to disk.
+
+    Times keep their UTC offset. Without it, a time in the hour repeated
+    when summer time ends came back an hour early after a restart."""
+
+    def _text(ts: int | None) -> str:
+        return datetime.fromtimestamp(ts).astimezone().isoformat() if ts else ""
+
     setattr(cfg, f"{prefix}_camera_ids", camera_ids or [])
-    setattr(
-        cfg,
-        f"{prefix}_from_time",
-        datetime.fromtimestamp(from_time).isoformat() if from_time else "",
-    )
-    setattr(
-        cfg,
-        f"{prefix}_to_time",
-        datetime.fromtimestamp(to_time).isoformat() if to_time else "",
-    )
+    setattr(cfg, f"{prefix}_from_time", _text(from_time))
+    setattr(cfg, f"{prefix}_to_time", _text(to_time))
     setattr(cfg, f"{prefix}_time_preset", time_preset)
     save_config(cfg)
