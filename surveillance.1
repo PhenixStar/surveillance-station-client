@@ -530,6 +530,34 @@ Station 9.3 from the next login, for testing), split
 by value type since TOML distinguishes numbers, booleans and text. Written by
 the Settings page itself; use its own reset buttons rather than
 hand-editing these.
+.PP
+The
+.B [webhooks]
+section, set by hand only, makes the client POST what it sees as JSON to
+each URL in
+.IR targets :
+the events listed in
+.IR events ,
+out of
+.BR alert ,
+.BR camera_offline ,
+.BR camera_online ,
+.BR home_mode ,
+.B snapshot_saved
+and
+.B layout_changed
+(all six by default), each POST taking at most
+.I timeout_seconds
+(3 by default, 30 at most). With no targets nothing is sent. The section
+is read at startup and written back as it was then on every save, so edit
+it with the application closed. A target is sent an
+.B Authorization: Bearer
+header when the keyring holds a token for it, under the service
+.I surveillance-station
+as
+.I webhook_token:
+followed by the target URL as written in
+.IR targets .
 .SH KEYBOARD SHORTCUTS
 .TP
 .B Ctrl+Q
