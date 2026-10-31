@@ -259,6 +259,26 @@ surveillance --debug --log-file=/tmp/run.log  # log to a file of your own choosi
 python -m surveillance                        # run directly from the source tree
 ```
 
+The same command also controls a client that is already running: a second
+launch hands its options over to the running instance and exits, with
+status 2 if an option is malformed. A first launch carries them out once
+you are logged in and the camera list has loaded.
+
+```sh
+surveillance --grid 3x3                       # switch Live View to a 1x1, 2x2, 3x3 or 4x4 grid
+surveillance --camera 12                      # show camera 12 in the slot the timeline tracks
+surveillance --camera 12 --fullscreen         # show camera 12 alone, in 1x1
+surveillance --seek 2026-10-30T22:15          # play every slot from that time (local time unless it has a zone)
+surveillance --live                           # return every slot to live
+surveillance --page recordings                # or live, events, snapshots, timelapse, settings
+```
+
+The Live View options switch to Live View first. Several can be combined
+and apply in the order grid, camera, seek or live, then page. A camera ID
+the NAS does not have, like anything else that cannot apply, is noted in
+the log and skipped. Camera IDs are the ones Surveillance Station numbers
+its cameras by, as used in the configuration file.
+
 Debug logs automatically redact passwords, session tokens, and usernames. A debug run also writes one line a minute recording the app's own memory use, open descriptors and thread count, so a long unattended session leaves a trend behind rather than just whatever state it ended in.
 
 `--log-file` writes at the same level as stderr (WARNING, or DEBUG with

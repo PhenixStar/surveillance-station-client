@@ -3564,6 +3564,27 @@ class LiveView(Gtk.Box):
         self._cameras = cameras
         self._restore_layout_cameras()
 
+    def show_camera(self, camera: Camera, fullscreen: bool = False) -> None:
+        """Put *camera* in the slot the timeline tracks, or with
+        *fullscreen* show it alone in 1x1, as clicking it in the sidebar
+        with no slot selected does. For the command line's --camera."""
+        if fullscreen:
+            self._select_slot(None)
+            self.on_camera_selected(camera)
+            return
+        self._assign_to_slot(self._timeline_focus_slot, camera)
+        self._save_session()
+
+    def seek_to(self, timestamp: float) -> None:
+        """Play every slot from *timestamp*, as the timeline's calendar
+        Jump does. For the command line's --seek."""
+        self._on_calendar_jump(datetime.fromtimestamp(timestamp))
+
+    def return_to_live(self) -> None:
+        """Return every slot to live, as the timeline's Live button
+        does. For the command line's --live."""
+        self._return_all_to_live()
+
     def _shown_slots(self) -> list[CameraSlot]:
         """Slots on screen with a camera: none while another page is
         shown, and never a hidden one, which keeps its camera across

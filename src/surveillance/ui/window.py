@@ -43,7 +43,7 @@ from surveillance.ui.layouts import valid_layout
 from surveillance.ui.sidebar import CameraSidebar
 
 if TYPE_CHECKING:
-    from surveillance.app import SurveillanceApp
+    from surveillance.app import RemoteRequest, SurveillanceApp
     from surveillance.services.transactions import Transaction
     from surveillance.ui.liveview import LiveView
 
@@ -112,6 +112,11 @@ class MainWindow(Gtk.ApplicationWindow):
         self._homemode_poll_id: int = 0
         self._alerts_poll_id: int = 0
         self._transactions_poll_id: int = 0
+
+        # Command line requests (see apply_remote_request) waiting for a
+        # login and its camera list, which most of them need.
+        self._live_session_ready = False
+        self._pending_remote_requests: list[RemoteRequest] = []
 
         # Window-wide mouse activity, used to keep the Live View timeline's
         # focus-slot frame lit (see LiveView.register_timeline_activity).
@@ -290,6 +295,68 @@ class MainWindow(Gtk.ApplicationWindow):
             page = self.stack.get_child_by_name(page_name)
             if page and hasattr(page, "refresh_camera_filter"):
                 page.refresh_camera_filter()
+
+        # Last, so a request made before the login overrides the page
+        # and layout the session was restored to.
+        self._live_session_ready = True
+        pending, self._pending_remote_requests = self._pending_remote_requests, []
+        for request in pending:
+            self.apply_remote_request(request)
+
+    def apply_remote_request(self, request: RemoteRequest) -> None:
+        """Carry out a request from the command line (see
+        surveillance.app.do_command_line): grid, then camera, then seek
+        or live, then page. Anything for Live View shows that page first.
+
+        Held back until logged in with the camera list loaded. What does
+        not apply here (an unknown camera, a page not built) is logged
+        and skipped; nothing a command line sends may break the window.
+        """
+        if not self._live_session_ready:
+            log.info("Holding command line request until logged in: %s", request)
+            self._pending_remote_requests.append(request)
+            return
+        try:
+            self._run_remote_request(request)
+        except Exception:
+            log.exception("Command line request failed: %s", request)
+
+    def _run_remote_request(self, request: RemoteRequest) -> None:
+        wants_live_view = (
+            request.grid is not None
+            or request.camera_id is not None
+            or request.seek is not None
+            or request.live
+        )
+        if wants_live_view:
+            live = self.stack.get_child_by_name("live")
+            if live is None or not hasattr(live, "show_camera"):
+                log.warning("Live View is not available, ignoring %s", request)
+            else:
+                self._run_live_view_request(live, request)
+        if request.page is not None:
+            if self.stack.get_child_by_name(request.page) is None:
+                log.warning("Page %r is not available", request.page)
+            else:
+                self.show_page(request.page)
+
+    def _run_live_view_request(self, live: LiveView, request: RemoteRequest) -> None:
+        if self.stack.get_visible_child_name() != "live":
+            self.show_page("live")
+        if request.grid is not None:
+            # Through the action, like the header bar's grid menu, so the
+            # menu shows the new layout too.
+            self._grid_layout_action.change_state(GLib.Variant.new_string(request.grid))
+        if request.camera_id is not None:
+            camera = next((c for c in self.sidebar.cameras if c.id == request.camera_id), None)
+            if camera is None:
+                log.warning("No camera with ID %d", request.camera_id)
+            else:
+                live.show_camera(camera, fullscreen=request.fullscreen)
+        if request.seek is not None:
+            live.seek_to(request.seek)
+        elif request.live:
+            live.return_to_live()
 
     def _setup_content_pages(self) -> None:
         """Build the real content widgets and undo _show_logged_out_state()."""
@@ -537,6 +604,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def on_disconnected(self) -> None:
         """Clean up when disconnected (logout/quit)."""
+        self._live_session_ready = False
         self.sidebar.stop_polling()
         self.sidebar.clear()
         self._stop_polling()
