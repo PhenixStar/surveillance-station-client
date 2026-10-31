@@ -216,6 +216,10 @@ class AppConfig:
     snapshots_search_from_time: str = ""
     snapshots_search_to_time: str = ""
     snapshots_search_time_preset: str = ""  # same values as search_time_preset
+    # The E-Map last opened on the Maps page, 0 for none. A factory rather
+    # than a plain default, as activate_profile resets the per-profile
+    # fields through their default_factory.
+    last_emap_id: int = field(default_factory=int)
     # camera ID -> discovered event types + scan progress, see
     # EventTypeHistory, for LegacyEventBackend. Deliberately
     # session/config-persisted rather than re-scanned every launch: a
@@ -284,6 +288,7 @@ PROFILE_STATE_FIELDS = (
     "search_camera_ids",
     "events_search_camera_ids",
     "snapshots_search_camera_ids",
+    "last_emap_id",
 )
 
 # What legacy_event_type_history was saved as before it was renamed.
@@ -382,6 +387,14 @@ def _volume(value: Any) -> int:
     return max(0, min(100, int(value)))
 
 
+def _map_id(value: Any) -> int:
+    """A saved E-Map id; anything that is not a positive whole number,
+    as a hand edit can leave, means no map."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return max(0, value)
+
+
 def _profile_state_from(data: dict[str, Any]) -> dict[str, Any]:
     """One profile's PROFILE_STATE_FIELDS out of *data*, which holds
     them under their own names."""
@@ -406,6 +419,7 @@ def _profile_state_from(data: dict[str, Any]) -> dict[str, Any]:
         "search_camera_ids": data.get("search_camera_ids", []),
         "events_search_camera_ids": data.get("events_search_camera_ids", []),
         "snapshots_search_camera_ids": data.get("snapshots_search_camera_ids", []),
+        "last_emap_id": _map_id(data.get("last_emap_id")),
     }
 
 
@@ -434,6 +448,7 @@ def _profile_state_to(state: dict[str, Any]) -> dict[str, Any]:
         "search_camera_ids": state["search_camera_ids"],
         "events_search_camera_ids": state["events_search_camera_ids"],
         "snapshots_search_camera_ids": state["snapshots_search_camera_ids"],
+        "last_emap_id": state["last_emap_id"],
     }
     return {key: value for key, value in tables.items() if value}
 

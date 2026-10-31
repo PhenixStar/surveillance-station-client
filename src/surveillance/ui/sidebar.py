@@ -113,6 +113,7 @@ class CameraSidebar(Gtk.Box):
             ("camera-photo-symbolic", "Snapshots", "snapshots"),
             ("dialog-warning-symbolic", "Events", "events"),
             ("surveillance-time-lapse-symbolic", "Time Lapse", "timelapse"),
+            ("mark-location-symbolic", "Maps", "maps"),
             ("dialog-password-symbolic", "Licenses", "licenses"),
             ("preferences-system-symbolic", "Settings", "settings"),
             ("help-about-symbolic", "About", "about"),
