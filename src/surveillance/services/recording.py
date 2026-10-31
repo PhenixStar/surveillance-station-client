@@ -99,8 +99,11 @@ def preset_range(preset: str) -> tuple[int, int]:
         return int(start.timestamp()), int(end.timestamp())
     if preset == PRESET_LAST24H:
         # The one duration-named (not day-named) preset: a literal rolling
-        # 24h window ending at "now", not a calendar-day boundary.
-        return int((now - timedelta(hours=24)).timestamp()), int(now.timestamp())
+        # 24h window ending at "now", not a calendar-day boundary. Counted
+        # in seconds, not on the wall clock, which covered 25 or 23 hours
+        # on a day the clocks change.
+        end_ts = int(now.timestamp())
+        return end_ts - 24 * 3600, end_ts
     if preset == PRESET_LAST7D:
         start = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
         end = now.replace(hour=23, minute=59, second=59, microsecond=0)

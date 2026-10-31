@@ -31,6 +31,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -300,6 +301,29 @@ class TestPresetRange:
         from_ts, to_ts = preset_range("last24h")
         diff_hours = (to_ts - from_ts) / 3600
         assert 23.9 <= diff_hours <= 24.1
+
+    @pytest.mark.parametrize("day", [(2026, 3, 29), (2026, 10, 25)])
+    def test_last24h_is_24_hours_on_a_day_the_clocks_change(
+        self, day: tuple[int, int, int], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import time
+
+        from surveillance.services import recording
+
+        class _Now(datetime):
+            @classmethod
+            def now(cls, tz: Any = None) -> _Now:
+                return cls(*day, 12, 0)
+
+        monkeypatch.setattr(recording, "datetime", _Now)
+        monkeypatch.setenv("TZ", "Europe/Brussels")
+        time.tzset()
+        try:
+            from_ts, to_ts = recording.preset_range("last24h")
+        finally:
+            monkeypatch.undo()
+            time.tzset()
+        assert to_ts - from_ts == 24 * 3600
 
     def test_last7d_range_is_full_days(self) -> None:
         self._assert_full_days_back("last7d", 7)
