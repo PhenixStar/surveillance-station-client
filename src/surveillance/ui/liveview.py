@@ -48,7 +48,7 @@ from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango  # type: ignore[
 
 from surveillance.api.models import Camera, CameraStatus, Event, PtzPatrol, PtzPreset, Recording
 from surveillance.config import EventTypeHistory, save_config, save_config_now
-from surveillance.services import ptz
+from surveillance.services import ptz, webhooks
 from surveillance.services.event import list_recording_presence, merge_intervals
 from surveillance.services.event_backend import TypeSignature
 from surveillance.services.live import (
@@ -2799,6 +2799,7 @@ class LiveView(Gtk.Box):
 
     def _on_snapshot_taken(self, camera: Camera, snapshot_id: int) -> None:
         log.info("Snapshot saved to server (id=%d) for %s", snapshot_id, camera.name)
+        webhooks.emit("snapshot_saved", camera, {"snapshot_id": snapshot_id})
         if not self.app.api:
             return
 
@@ -3523,6 +3524,7 @@ class LiveView(Gtk.Box):
         self.app.config.layout_cameras[self._current_layout] = cam_ids
         log.debug("layout_cameras session save: [%s] = %s", self._current_layout, cam_ids)
         save_config_now(self.app.config)
+        webhooks.note_layout(self._current_layout, cam_ids)
         # Session changes (assign/clear a slot's camera) can change the
         # layout-accumulated row's own camera set.
         self._request_presence_refresh()
