@@ -28,6 +28,8 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import NoReturn
 
@@ -42,6 +44,7 @@ from surveillance.api.client import SurveillanceAPI
 from surveillance.config import AppConfig, load_config
 from surveillance.services.event_backend import EventBackend
 from surveillance.services.legacy_event import LegacyEventBackend
+from surveillance.ui.layouts import LAYOUT_VISIBLE
 from surveillance.util.async_bridge import setup_async
 
 log = logging.getLogger(__name__)
@@ -53,6 +56,84 @@ CSS_PATH = Path(__file__).parent / "data" / "style.css"
 # to the theme like any stock symbolic icon.
 ICONS_PATH = Path(__file__).parent / "data" / "icons"
 
+# Pages --page can switch to, by their name in the window's page stack.
+REMOTE_PAGES = ("live", "recordings", "events", "snapshots", "timelapse", "settings")
+
+
+@dataclass(frozen=True)
+class RemoteRequest:
+    """What one command line asks the running instance to do.
+
+    Parsed from the options GApplication hands the primary instance,
+    whether it is that instance's own command line or one forwarded from
+    a second launch. MainWindow.apply_remote_request carries it out, in
+    the order the fields are listed here.
+    """
+
+    grid: str | None = None
+    camera_id: int | None = None
+    fullscreen: bool = False
+    # Unix time, already converted from the --seek argument.
+    seek: float | None = None
+    live: bool = False
+    page: str | None = None
+
+
+def parse_remote_request(options: dict[str, object]) -> RemoteRequest | None:
+    """Turn the command line's options into a RemoteRequest.
+
+    *options* is the unpacked GVariantDict GOption filled in, keyed by
+    long option name. Returns None when none of the remote control
+    options is given, and raises ValueError, with a message for the
+    user, when one is malformed. Only checks what the options say on
+    their own: whether a camera ID exists is up to the window, which has
+    the camera list.
+    """
+    keys = ("grid", "camera", "fullscreen", "seek", "live", "page")
+    if not any(key in options for key in keys):
+        return None
+
+    # A named layout preset would be resolved here too, into its grid and
+    # cameras, once the configuration has presets: --preset NAME then
+    # becomes one more option feeding the same request.
+    grid = options.get("grid")
+    if grid is not None and grid not in LAYOUT_VISIBLE:
+        raise ValueError(f"Unknown grid {grid!r}, expected one of {', '.join(LAYOUT_VISIBLE)}")
+
+    camera_id = options.get("camera")
+    if camera_id is not None and (not isinstance(camera_id, int) or camera_id <= 0):
+        raise ValueError(f"Invalid camera ID {camera_id!r}")
+    fullscreen = bool(options.get("fullscreen", False))
+    if fullscreen and camera_id is None:
+        raise ValueError("--fullscreen needs --camera")
+
+    seek: float | None = None
+    seek_arg = options.get("seek")
+    live = bool(options.get("live", False))
+    if seek_arg is not None:
+        if live:
+            raise ValueError("--seek and --live cannot be combined")
+        try:
+            # A time without a zone is local time, as on the timeline.
+            seek = datetime.fromisoformat(str(seek_arg)).timestamp()
+        except ValueError:
+            raise ValueError(
+                f"Invalid time {seek_arg!r}, expected ISO 8601 such as 2026-01-31T22:15"
+            ) from None
+
+    page = options.get("page")
+    if page is not None and page not in REMOTE_PAGES:
+        raise ValueError(f"Unknown page {page!r}, expected one of {', '.join(REMOTE_PAGES)}")
+
+    return RemoteRequest(
+        grid=grid if isinstance(grid, str) else None,
+        camera_id=camera_id if isinstance(camera_id, int) else None,
+        fullscreen=fullscreen,
+        seek=seek,
+        live=live,
+        page=page if isinstance(page, str) else None,
+    )
+
 
 class SurveillanceApp(Gtk.Application):
     """Main application."""
@@ -60,7 +141,9 @@ class SurveillanceApp(Gtk.Application):
     def __init__(self) -> None:
         super().__init__(
             application_id=APP_ID,
-            flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
+            # So the options below reach the instance already running,
+            # through do_command_line, when the app is launched again.
+            flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
         )
         # Registered for --help only. main() strips both flags from argv
         # before we run, because logging has to be configured before any
@@ -85,6 +168,19 @@ class SurveillanceApp(Gtk.Application):
             "Also write logs to a file; omit PATH for an auto-named one",
             "PATH",
         )
+        # Remote control: parsed here and carried out by the instance
+        # already running, or by this one once logged in. See
+        # do_command_line.
+        remote_options = [
+            ("grid", GLib.OptionArg.STRING, "Switch Live View to a grid layout", "1x1|2x2|3x3|4x4"),
+            ("camera", GLib.OptionArg.INT, "Show a camera in the focused Live View slot", "ID"),
+            ("fullscreen", GLib.OptionArg.NONE, "With --camera: show it alone, in 1x1", None),
+            ("seek", GLib.OptionArg.STRING, "Play every Live View slot from that time", "TIME"),
+            ("live", GLib.OptionArg.NONE, "Return every Live View slot to live", None),
+            ("page", GLib.OptionArg.STRING, "Switch to a page", "|".join(REMOTE_PAGES)),
+        ]
+        for name, arg, description, arg_description in remote_options:
+            self.add_main_option(name, 0, GLib.OptionFlags.NONE, arg, description, arg_description)
         self.config: AppConfig = AppConfig()
         # Set once do_startup has read the real config. Until then
         # self.config is the empty default above, and saving it would
@@ -179,6 +275,25 @@ class SurveillanceApp(Gtk.Application):
         self.apply_theme(self.config.theme)
         self._window.present()
 
+    def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
+        """Run for every launch, in the instance that is already running
+        when there is one: raise the window, then carry out whatever the
+        remote control options ask for. Returns the launching process's
+        exit status, 2 for a malformed option."""
+        self.activate()
+        options = command_line.get_options_dict().end().unpack()
+        try:
+            request = parse_remote_request(options)
+        except ValueError as e:
+            log.warning("Ignoring command line: %s", e)
+            # printerr_literal is GLib 2.80 and later.
+            if hasattr(command_line, "printerr_literal"):
+                command_line.printerr_literal(f"surveillance: {e}\n")
+            return 2
+        if request is not None and self._window is not None:
+            self._window.apply_remote_request(request)
+        return 0
+
     def set_api(self, api: SurveillanceAPI, event_backend: EventBackend) -> None:
         """Set the active API connection and its event backend, and with
         them whose camera-keyed settings are in effect. Before the pages
@@ -187,12 +302,14 @@ class SurveillanceApp(Gtk.Application):
         self.api = api
         self.event_backend = event_backend
 
-    def exit_now(self) -> NoReturn:
+    def exit_now(self, status: int = 0) -> NoReturn:
         """Save the config, mark the log complete and exit at once.
 
         Every way out ends here: the Quit action, closing the window and
         the signals. Without the save, a setting changed in the last
         second was still waiting on save_config's debounce and was lost.
+        *status* is the process's exit status, the one run() returned
+        for a launch that only handed its command line over.
         """
         import contextlib
         import os
@@ -206,7 +323,7 @@ class SurveillanceApp(Gtk.Application):
         from surveillance.logfile import mark_complete
 
         mark_complete()
-        os._exit(0)
+        os._exit(status)
 
     def _on_quit(self, action: Gio.SimpleAction, param: None) -> None:
         self.exit_now()
