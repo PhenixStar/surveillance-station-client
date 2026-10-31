@@ -47,32 +47,17 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-import keyring
-import keyring.errors
 
 from surveillance.api.models import Camera, CameraStatus
 from surveillance.config import WebhookConfig
+from surveillance.credentials import webhook_token
 from surveillance.util.async_bridge import get_loop
 
 log = logging.getLogger(__name__)
 
-# The keyring service the login credentials are kept under too.
-_KEYRING_SERVICE = "surveillance-station"
-
 # Events held per target while it is slow or down; beyond that the
 # oldest is dropped.
 QUEUE_SIZE = 64
-
-
-def webhook_token(profile: str) -> str | None:
-    """The bearer token for *profile*'s webhooks, None when there is none
-    or no keyring to ask. Blocks while a locked keyring asks to be
-    unlocked, so never call it on the GTK main thread."""
-    try:
-        return keyring.get_password(_KEYRING_SERVICE, f"{profile}:webhook_token")
-    except keyring.errors.KeyringError as e:
-        log.debug("No webhook token from the keyring: %s", e)
-        return None
 
 
 def redacted(url: str) -> str:

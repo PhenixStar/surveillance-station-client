@@ -37,6 +37,7 @@ import keyring.errors
 import pytest
 import respx
 
+from surveillance import credentials
 from surveillance.api.models import Camera, CameraStatus
 from surveillance.config import WEBHOOK_EVENTS, WebhookConfig
 from surveillance.services import webhooks
@@ -311,14 +312,14 @@ class TestHelpers:
         def _fail(service: str, name: str) -> str:
             raise keyring.errors.KeyringError("locked")
 
-        monkeypatch.setattr(webhooks.keyring, "get_password", _fail)
+        monkeypatch.setattr(credentials.keyring, "get_password", _fail)
         assert webhooks.webhook_token("test-nas") is None
 
     def test_token_item_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.undo()
         asked: list[tuple[str, str]] = []
         monkeypatch.setattr(
-            webhooks.keyring, "get_password", lambda s, n: asked.append((s, n)) or "t"
+            credentials.keyring, "get_password", lambda s, n: asked.append((s, n)) or "t"
         )
         assert webhooks.webhook_token("test-nas") == "t"
         assert asked == [("surveillance-station", "test-nas:webhook_token")]
