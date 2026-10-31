@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -37,7 +38,7 @@ import pytest
 import respx
 
 from surveillance.api.client import ApiError, SurveillanceAPI
-from surveillance.api.models import EMap, EMapItem
+from surveillance.api.models import Camera, CameraStatus, EMap, EMapItem
 from surveillance.config import ConnectionProfile
 from surveillance.services.emap import (
     EMAP_API,
@@ -313,3 +314,240 @@ class TestSaveMarkers:
         with pytest.raises(ApiError) as exc:
             _run(nas, EMapService(_api()).save_markers(1, [], [11, 12, 13]))
         assert emaps_read_only(exc.value)
+
+
+def _cam(camera_id: int, name: str) -> Camera:
+    return Camera(id=camera_id, name=name, model="", vendor="", status=CameraStatus.ENABLED)
+
+
+class TestMapEdits:
+    """The working copy of a map's items while it is edited."""
+
+    def _edits(self) -> Any:
+        from surveillance.ui.emaps_edit import MapEdits
+
+        emap = EMap.from_api(LOAD_DATA["emap"][0])
+        return MapEdits(emap, 1600, 1000)
+
+    def test_starts_clean_with_every_item_and_only_cameras_as_markers(self) -> None:
+        edits = self._edits()
+        assert not edits.dirty
+        assert [i.id for i in edits.items] == [11, 12, 13]
+        assert [(i, item.id) for i, item in edits.markers] == [(0, 11), (1, 12)]
+        assert edits.camera_ids == {5, 7}
+        assert edits.base_item_ids == [11, 12, 13]
+
+    def test_unplaced_lists_the_sidebar_cameras_not_on_the_map_by_name(self) -> None:
+        edits = self._edits()
+        cameras = [_cam(7, "Yard"), _cam(9, "Lobby"), _cam(5, "Door"), _cam(8, "Attic")]
+        assert [c.id for c in edits.unplaced(cameras)] == [8, 9]
+
+    def test_add_camera_drops_the_marker_at_the_image_centre(self) -> None:
+        edits = self._edits()
+        index = edits.add_camera(9)
+        assert index == 3
+        added = edits.items[3]
+        assert (added.ref_item_id, added.id) == (9, 0)
+        assert (added.lng, added.lat) == pytest.approx((0.8, 0.5))
+        assert edits.dirty
+        assert 9 in edits.camera_ids
+
+    def test_move_is_clamped_to_the_image(self) -> None:
+        edits = self._edits()
+        edits.move(0, -50, 1200)
+        assert (edits.items[0].lng, edits.items[0].lat) == pytest.approx((0.0, 0.0))
+        edits.move(0, 1700, -5)
+        assert (edits.items[0].lng, edits.items[0].lat) == pytest.approx((1.6, 1.0))
+        edits.move(0, 400, 250)
+        assert (edits.items[0].lng, edits.items[0].lat) == pytest.approx((0.4, 0.75))
+        assert edits.dirty
+        # The moved item still carries what the NAS said about it.
+        assert edits.items[0].raw["radius"] == 20000
+        assert edits.items[0].id == 11
+
+    def test_move_to_the_same_place_is_not_a_change(self) -> None:
+        edits = self._edits()
+        edits.move(0, 400, 250)
+        assert not edits.dirty
+
+    def test_remove_keeps_the_other_items(self) -> None:
+        edits = self._edits()
+        edits.remove(0)
+        assert [i.id for i in edits.items] == [12, 13]
+        assert edits.dirty
+        # The base is untouched: the stale check still compares the
+        # NAS against what was loaded.
+        assert edits.base_item_ids == [11, 12, 13]
+
+
+class TestEditGeometry:
+    def test_clamp_to_image(self) -> None:
+        from surveillance.ui.emaps_edit import clamp_to_image
+
+        assert clamp_to_image(-1, -1, 1600, 1000) == (0, 0)
+        assert clamp_to_image(1601, 1001, 1600, 1000) == (1600, 1000)
+        assert clamp_to_image(800, 500, 1600, 1000) == (800, 500)
+
+    def test_widget_to_image_inverts_marker_to_widget(self) -> None:
+        from surveillance.ui.emaps import marker_to_widget, widget_to_image
+
+        # 1600x1000 drawn at 800x500 in an 800x800 area.
+        wx, wy = marker_to_widget(0.4, 0.75, 1600, 1000, 800, 800)
+        assert widget_to_image(wx, wy, 1600, 1000, 800, 800) == pytest.approx((400, 250))
+        assert widget_to_image(0, 0, 1600, 1000, 800, 800) == pytest.approx((0, -300))
+        assert widget_to_image(0, 0, 0, 0, 800, 800) == (0.0, 0.0)
+
+
+def _pixbuf_bytes(kind: str) -> bytes:
+    from gi.repository import GdkPixbuf
+
+    pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, False, 8, 4, 3)
+    pixbuf.fill(0x3366CCFF)
+    ok, buffer = pixbuf.save_to_bufferv(kind, [], [])
+    assert ok
+    return bytes(buffer)
+
+
+class TestImagePreparation:
+    def test_a_png_goes_as_it_is(self) -> None:
+        from surveillance.ui.emaps_edit import is_png, rasterise_to_png
+
+        png = _pixbuf_bytes("png")
+        assert is_png(png)
+        assert rasterise_to_png(png) is png
+
+    def test_a_jpeg_is_re_encoded_as_png_at_its_own_size(self) -> None:
+        from gi.repository import GdkPixbuf
+
+        from surveillance.ui.emaps_edit import is_png, rasterise_to_png
+
+        jpeg = _pixbuf_bytes("jpeg")
+        assert not is_png(jpeg)
+        png = rasterise_to_png(jpeg)
+        assert is_png(png)
+        loader = GdkPixbuf.PixbufLoader()
+        loader.write(png)
+        loader.close()
+        pixbuf = loader.get_pixbuf()
+        assert (pixbuf.get_width(), pixbuf.get_height()) == (4, 3)
+
+    def test_an_svg_is_drawn_with_its_longer_side_at_the_raster_size(self) -> None:
+        from gi.repository import GdkPixbuf
+
+        from surveillance.ui import emaps_edit
+
+        if "svg" not in {f.get_name() for f in GdkPixbuf.Pixbuf.get_formats()}:
+            pytest.skip("no SVG pixbuf loader on this host")
+        svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">'
+            b'<rect width="40" height="20" fill="#39c"/></svg>'
+        )
+        png = rasterised = emaps_edit.rasterise_to_png(svg)
+        assert emaps_edit.is_png(rasterised)
+        loader = GdkPixbuf.PixbufLoader()
+        loader.write(png)
+        loader.close()
+        pixbuf = loader.get_pixbuf()
+        assert (pixbuf.get_width(), pixbuf.get_height()) == (
+            emaps_edit.SVG_RASTER_SIDE,
+            emaps_edit.SVG_RASTER_SIDE // 2,
+        )
+
+    def test_something_else_is_refused(self) -> None:
+        from surveillance.ui.emaps_edit import rasterise_to_png
+
+        with pytest.raises(ValueError, match="decoded"):
+            rasterise_to_png(b"not an image at all")
+
+    def test_map_name_from_file(self) -> None:
+        from surveillance.ui.emaps_edit import map_name_from_file
+
+        assert map_name_from_file("ground_floor.svg") == "ground floor"
+        assert map_name_from_file("Plan.PNG") == "Plan"
+        assert map_name_from_file(".png") == "New map"
+
+
+class _Stub:
+    """A widget stand-in recording every setter call."""
+
+    def __init__(self) -> None:
+        self.calls: dict[str, Any] = {}
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+
+        def _record(*args: Any) -> None:
+            self.calls[name] = args[0] if len(args) == 1 else args
+
+        return _record
+
+
+class _Page:
+    """A Maps page without GTK: EMapsView's methods bound to stub state."""
+
+    def __init__(self) -> None:
+        self._service = object()
+        self._unavailable = False
+        self._read_only = False
+        self._busy = True
+        self._toggling = False
+        self._emap = EMap(id=1, name="Map A", image_name="a.png")
+        self._edits = SimpleNamespace(dirty=True, markers=[])
+        self._drag_index = 0
+        self._new_btn = _Stub()
+        self._edit_btn = _Stub()
+        self._edit_bar = _Stub()
+        self._edit_note = _Stub()
+        self.area = _Stub()
+        self.errors: list[tuple[str, str]] = []
+        self.reloads = 0
+
+    def _show_edit_error(self, message: str, detail: str) -> None:
+        self.errors.append((message, detail))
+
+    def _reload_current(self) -> None:
+        self.reloads += 1
+
+    def __getattr__(self, name: str) -> Any:
+        import types
+
+        from surveillance.ui.emaps import EMapsView
+
+        return types.MethodType(getattr(EMapsView, name), self)
+
+
+class TestEditFailures:
+    def test_105_turns_the_page_read_only(self) -> None:
+        from surveillance.ui.emaps_edit import READ_ONLY_MESSAGE
+
+        page = _Page()
+        page._on_edit_failed(ApiError(105))
+
+        assert page._read_only
+        assert page._edits is None
+        assert page._busy is False
+        assert page._edit_btn.calls["set_active"] is False
+        assert page._edit_btn.calls["set_sensitive"] is False
+        assert page._new_btn.calls["set_sensitive"] is False
+        assert page._edit_bar.calls["set_visible"] is False
+        assert page._edit_note.calls["set_visible"] is True
+        assert page.errors == [("The map could not be changed", READ_ONLY_MESSAGE)]
+        assert page.reloads == 0
+
+    def test_a_stale_list_is_reported_and_the_map_reloaded(self) -> None:
+        page = _Page()
+        page._on_edit_failed(StaleMapError("changed"))
+        assert not page._read_only
+        assert page.reloads == 1
+        assert page.errors[0][0] == "The map changed on the NAS"
+        # Editing stays possible: the reload rebuilds the working copy.
+        assert page._edit_btn.calls["set_sensitive"] is True
+
+    def test_other_errors_leave_editing_on(self) -> None:
+        page = _Page()
+        page._on_edit_failed(DuplicateMapNameError("taken"))
+        page._on_edit_failed(OSError("down"))
+        assert not page._read_only
+        assert [m for m, _ in page.errors] == ["That name is taken", "The map could not be changed"]
+        assert page._new_btn.calls["set_sensitive"] is True

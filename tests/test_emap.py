@@ -357,6 +357,10 @@ class TestLoadErrorMessage:
             _listed=True,
             shown=shown,
             _show_message=shown.append,
+            # Losing the maps also ends an edit in progress.
+            _emap=None,
+            _end_edit=MagicMock(),
+            _update_edit_controls=MagicMock(),
         )
 
     def test_a_failed_relogin_says_so(self) -> None:
