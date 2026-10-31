@@ -304,7 +304,12 @@ class LoginDialog(Gtk.Window):
 
     def _on_connect_success(self, result: Any) -> None:
         api, profile, username, password, event_backend = result
-        if self._dismissed:
+        # Cancelling the two-factor dialog closes the client but cannot
+        # stop the login, and a failure on the closed client after it is
+        # swallowed by the event backend lookup, so the application was
+        # handed a client that fails every request.
+        cancelled = api is not self._current_api
+        if self._dismissed or cancelled:
             run_async(api.close())
             return
 
