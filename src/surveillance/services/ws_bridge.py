@@ -693,14 +693,16 @@ class WebSocketBridge:
         if muxable:
             try:
                 await self._start_muxed(video_codec, audio_codec)
-            except OSError:
+            except OSError as exc:
                 # No ffmpeg on PATH, or it could not be executed. Audio is
                 # the optional half here: this camera played video-only
                 # before the muxer existed, so drop to that rather than
                 # taking the whole stream down with it.
                 log.warning(
-                    "WebSocket bridge for %s: cannot run ffmpeg, streaming video without audio",
+                    "WebSocket bridge for %s: cannot run ffmpeg (%s), "
+                    "streaming video without audio",
                     self._label,
+                    exc,
                 )
                 muxable = False
         if not muxable:
@@ -914,11 +916,17 @@ class WebSocketBridge:
         await asyncio.sleep(_FFMPEG_START_GRACE)
         if self._ffmpeg_proc.returncode is not None:
             code = self._ffmpeg_proc.returncode
+            # The reason is the last thing ffmpeg printed, there to read
+            # only on a debug run, which is the only run that pipes it.
+            said = ""
+            if self._ffmpeg_proc.stderr is not None:
+                lines = (await self._ffmpeg_proc.stderr.read()).decode(errors="replace")
+                said = lines.strip().rsplit("\n", 1)[-1]
             # Dropped, not kept: the camera falls back to a raw pipe mpv
             # reads, and _stall_detail would describe that pipe as
             # ffmpeg's output.
             self._ffmpeg_proc = None
-            raise OSError(f"ffmpeg exited at once with code {code}")
+            raise OSError(f"ffmpeg exited at once with code {code}" + (f": {said}" if said else ""))
         self._ffmpeg_watch = asyncio.create_task(self._watch_ffmpeg(self._ffmpeg_proc))
         if self._ffmpeg_proc.stderr is not None:
             self._ffmpeg_stderr = asyncio.create_task(
@@ -1106,10 +1114,11 @@ class WebSocketBridge:
         )
         try:
             await self._start_muxed(self._pending_video_codec, self._audio_codec)
-        except OSError:
+        except OSError as exc:
             log.warning(
-                "WebSocket bridge for %s: cannot run ffmpeg, streaming video without audio",
+                "WebSocket bridge for %s: cannot run ffmpeg (%s), streaming video without audio",
                 self._label,
+                exc,
             )
             await self._fall_back_to_video_only()
             return

@@ -41,6 +41,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import fcntl
+import logging
 import os
 import sys
 import threading
@@ -1238,6 +1239,33 @@ class TestAudioMuxDecision:
         assert bridge._ffmpeg_proc is None
         assert bridge._stall_detail() == ""
         await bridge.stop()
+
+    async def test_an_ffmpeg_that_exits_at_once_says_why(
+        self, connect: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The warning used to read "cannot run ffmpeg" with nothing
+        else, as if it were missing, when it had run and refused."""
+        said = asyncio.StreamReader()
+        said.feed_data(
+            b"Unrecognized option 'max_interleave_delta'.\n"
+            b"Error splitting the argument list: Option not found\n"
+        )
+        said.feed_eof()
+        dead = _DeadFfmpegProc()
+        dead.returncode = 8
+        dead.stderr = said
+
+        async def _fake_subprocess_exec(*args: Any, **kwargs: Any) -> _FakeFfmpegProc:
+            return dead
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess_exec)
+        connect(_FakeWS([_frame(b"vdoCodec=H265&adoCodec=PCMU", b"")], hang=True))
+        bridge = WebSocketBridge("wss://nas/stream", False, "sid")
+        with caplog.at_level(logging.WARNING, logger="surveillance.services.ws_bridge"):
+            await bridge.start()
+        await bridge.stop()
+        assert bridge.audio_active is False
+        assert "code 8: Error splitting the argument list: Option not found" in caplog.text
 
     async def test_each_input_gets_the_queue_option_the_probe_settled_on(
         self, connect: Any, monkeypatch: pytest.MonkeyPatch
