@@ -289,7 +289,7 @@ surveillance --camera 12                      # show camera 12 in the slot the t
 surveillance --camera 12 --solo               # show camera 12 alone, in 1x1
 surveillance --seek 2026-10-30T22:15          # play every slot from that time (local time unless it has a zone)
 surveillance --live                           # return every slot to live
-surveillance --page recordings                # or live, events, snapshots, timelapse, settings
+surveillance --page recordings                # or live, events, snapshots, timelapse, maps, settings
 ```
 
 The Live View options switch to Live View first. Several can be combined

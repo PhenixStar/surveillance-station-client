@@ -50,6 +50,7 @@ class TestParseRemoteRequest:
         )
         assert request == RemoteRequest(grid="3x3", camera_id=12, solo=True, page="events")
         assert parse_remote_request({"live": True}) == RemoteRequest(live=True)
+        assert parse_remote_request({"page": "maps"}) == RemoteRequest(page="maps")
 
     def test_seek_with_zone(self) -> None:
         request = parse_remote_request({"seek": "2026-10-30T22:15:00Z"})
@@ -73,7 +74,7 @@ class TestParseRemoteRequest:
             {"solo": True},
             {"seek": "yesterday"},
             {"seek": "2026-10-30T22:15", "live": True},
-            {"page": "maps"},
+            {"page": "nowhere"},
         ],
     )
     def test_malformed_option_is_rejected(self, options: dict[str, object]) -> None:
