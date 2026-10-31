@@ -84,10 +84,11 @@ def webhook_token(url: str) -> str | None:
     services.webhooks), or None if there is none or the keyring is
     unavailable or locked."""
     try:
-        return keyring.get_password(SERVICE_NAME, f"webhook_token:{url}")
+        token: str | None = keyring.get_password(SERVICE_NAME, f"webhook_token:{url}")
     except keyring.errors.KeyringError as e:
         log.debug("No webhook token from the keyring: %s", e)
         return None
+    return token
 
 
 # The blocking versions above talk to the Secret Service over D-Bus. A
