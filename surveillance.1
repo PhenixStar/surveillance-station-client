@@ -398,6 +398,10 @@ Connection profiles define NAS host, port, HTTPS, and SSL verification settings.
 Credentials are stored securely via the system keyring. When two-factor
 authentication is enabled, trusted device tokens are stored per profile in the
 config file.
+When a session expires the client logs in again with the password it
+connected with. If the NAS refuses that login, for instance because the
+password was changed elsewhere, a two-factor code is needed, or the account
+is disabled, blocked or locked, the client stops trying until the next login.
 .PP
 The
 .B [general]

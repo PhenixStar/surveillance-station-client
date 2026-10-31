@@ -87,6 +87,9 @@ AUTH_ERRORS: dict[int, str] = {
 
 AUTH_API = "SYNO.API.Auth"
 SESSION_ERRORS = {105, 106, 107, 119}
+# A login answered with one of these will be answered the same way next
+# time. The shared codes below 400 include "the system is busy".
+LOGIN_REFUSALS = frozenset(AUTH_ERRORS.keys() - COMMON_ERRORS.keys())
 OTP_ERRORS = {403, 404, 406}
 
 
@@ -173,6 +176,8 @@ class SurveillanceAPI:
         # NAS answers by demanding an OTP code no background retry can
         # supply. login() overwrites it whenever the server issues a new one.
         self.device_id = profile.device_id
+        # Why the NAS refused the stored credentials, once it has.
+        self._refusal = ""
         self._api_info: dict[str, ApiInfo] = {}
         self._client: httpx.AsyncClient | None = None
         self._closed = False
@@ -325,23 +330,40 @@ class SurveillanceAPI:
             return await self.raw_request(api, method, version, extra_params, timeout=timeout)
         except ApiError as e:
             if e.code in SESSION_ERRORS and self.username and self.password:
-                log.info("Session error %d, attempting re-login", e.code)
-                try:
-                    await login(
-                        self,
-                        self.username,
-                        self.password,
-                        device_id=self.device_id,
-                        device_name=platform.node(),
-                    )
-                except (AuthError, ApiError) as relogin_exc:
-                    # login() reports a rejected password as ApiError, not
-                    # AuthError, so catching only the latter let a stale
-                    # stored password surface as whatever the failing data
-                    # call happened to be.
-                    raise SessionExpiredError(str(relogin_exc)) from e
+                await self._relogin(e)
                 return await self.raw_request(api, method, version, extra_params, timeout=timeout)
             raise
+
+    async def _relogin(self, cause: ApiError) -> None:
+        """Log in again with the stored credentials after *cause*, a
+        session error.
+
+        A NAS that refuses them will go on refusing them, so later calls
+        fail at once, each with the NAS's own reason. Otherwise every poll
+        sent them again, a wrong-password login every few seconds for as
+        long as the client ran, which is what DSM's auto block bans an
+        address for. A login that got no answer, or a busy one, is tried
+        again by the next call.
+        """
+        if self._refusal:
+            raise SessionExpiredError(self._refusal) from cause
+        log.info("Session error %d, logging in again", cause.code)
+        try:
+            await login(
+                self,
+                self.username,
+                self.password,
+                device_id=self.device_id,
+                device_name=platform.node(),
+            )
+        except (AuthError, ApiError) as exc:
+            # login() reports a rejected password as ApiError, not
+            # AuthError, so catching only the latter let a stale stored
+            # password surface as whatever the failing data call happened
+            # to be.
+            if isinstance(exc, ApiError) and exc.code in LOGIN_REFUSALS:
+                self._refusal = str(exc)
+            raise SessionExpiredError(str(exc)) from cause
 
     async def _raw_download(
         self,
@@ -473,17 +495,7 @@ class SurveillanceAPI:
         except ApiError as e:
             if started or e.code not in SESSION_ERRORS or not (self.username and self.password):
                 raise
-            log.info("Session error %d during download, attempting re-login", e.code)
-            try:
-                await login(
-                    self,
-                    self.username,
-                    self.password,
-                    device_id=self.device_id,
-                    device_name=platform.node(),
-                )
-            except (AuthError, ApiError) as relogin_exc:
-                raise SessionExpiredError(str(relogin_exc)) from e
+            await self._relogin(e)
         else:
             return
 
@@ -502,21 +514,7 @@ class SurveillanceAPI:
             return await self._raw_download(api, method, version, extra_params)
         except ApiError as e:
             if e.code in SESSION_ERRORS and self.username and self.password:
-                log.info("Session error %d during download, attempting re-login", e.code)
-                try:
-                    await login(
-                        self,
-                        self.username,
-                        self.password,
-                        device_id=self.device_id,
-                        device_name=platform.node(),
-                    )
-                except (AuthError, ApiError) as relogin_exc:
-                    # login() reports a rejected password as ApiError, not
-                    # AuthError, so catching only the latter let a stale
-                    # stored password surface as whatever the failing data
-                    # call happened to be.
-                    raise SessionExpiredError(str(relogin_exc)) from e
+                await self._relogin(e)
                 return await self._raw_download(api, method, version, extra_params)
             raise
 

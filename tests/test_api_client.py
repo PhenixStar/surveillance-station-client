@@ -163,6 +163,125 @@ class TestLogout:
         assert not api.password
 
 
+class TestRelogin:
+    """A session error logs in again with the stored credentials. One the
+    NAS refuses must not be sent again by every later poll."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_a_refused_password_is_not_sent_again(self, api: SurveillanceAPI) -> None:
+        from surveillance.api.auth import SessionExpiredError
+
+        api.username = "admin"
+        api.password = "stale"  # noqa: S105
+        logins = respx.post(url__regex=r".*").mock(
+            return_value=Response(200, json={"success": False, "error": {"code": 400}})
+        )
+        respx.get(url__regex=r".*").mock(
+            return_value=Response(200, json={"success": False, "error": {"code": 119}})
+        )
+
+        # Every call, not only the first, says the session is gone for
+        # good, and why: the pages that tell the user so show the message.
+        reasons = []
+        for _poll in range(4):
+            with pytest.raises(SessionExpiredError) as exc_info:
+                await api.request(api="SYNO.SurveillanceStation.Camera", method="List")
+            reasons.append(str(exc_info.value))
+        await api.close()
+
+        assert logins.call_count == 1
+        assert reasons == ["No such account or incorrect password"] * 4
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_a_busy_nas_keeps_the_password(self, api: SurveillanceAPI) -> None:
+        """109 is the shared "network unstable or system busy" code, not
+        a refusal: the next poll has to be able to log in."""
+        from surveillance.api.auth import SessionExpiredError
+
+        api.username = "admin"
+        api.password = "right"  # noqa: S105
+        logins = respx.post(url__regex=r".*").mock(
+            side_effect=[
+                Response(200, json={"success": False, "error": {"code": 109}}),
+                Response(200, json={"success": True, "data": {"sid": "fresh"}}),
+            ]
+        )
+        data = respx.get(url__regex=r".*").mock(
+            side_effect=[
+                Response(200, json={"success": False, "error": {"code": 119}}),
+                Response(200, json={"success": False, "error": {"code": 119}}),
+                Response(200, json={"success": True, "data": {"cameras": []}}),
+            ]
+        )
+
+        with pytest.raises(SessionExpiredError):
+            await api.request(api="SYNO.SurveillanceStation.Camera", method="List")
+        assert await api.request(api="SYNO.SurveillanceStation.Camera", method="List") == {
+            "cameras": []
+        }
+        await api.close()
+
+        assert logins.call_count == 2
+        assert data.call_count == 3
+        assert api.sid == "fresh"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_a_login_with_no_answer_is_tried_again(self, api: SurveillanceAPI) -> None:
+        import httpx
+
+        api.username = "admin"
+        api.password = "right"  # noqa: S105
+        logins = respx.post(url__regex=r".*").mock(side_effect=httpx.ConnectError("down"))
+        respx.get(url__regex=r".*").mock(
+            return_value=Response(200, json={"success": False, "error": {"code": 119}})
+        )
+
+        for _poll in range(2):
+            with pytest.raises(httpx.ConnectError):
+                await api.request(api="SYNO.SurveillanceStation.Camera", method="List")
+        await api.close()
+
+        assert logins.call_count == 2
+        assert api.password == "right"  # noqa: S105
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_downloads_stop_after_a_refusal_too(self, profile: ConnectionProfile) -> None:
+        from surveillance.api.auth import SessionExpiredError
+
+        respx.post(url__regex=r".*").mock(
+            return_value=Response(200, json={"success": False, "error": {"code": 403}})
+        )
+        respx.get(url__regex=r".*").mock(
+            return_value=Response(200, json={"success": False, "error": {"code": 119}})
+        )
+
+        async def download(api: SurveillanceAPI) -> None:
+            await api.download(api="SYNO.SurveillanceStation.Recording", method="Download")
+
+        async def stream(api: SurveillanceAPI) -> None:
+            async for _chunk in api.stream_download(
+                api="SYNO.SurveillanceStation.Recording", method="Download"
+            ):
+                pass
+
+        for fetch in (download, stream):
+            api = SurveillanceAPI(profile)
+            api.username = "admin"
+            api.password = "stale"  # noqa: S105
+            logins = respx.calls.call_count
+            for _try in range(2):
+                with pytest.raises(SessionExpiredError, match="Two-factor"):
+                    await fetch(api)
+            await api.close()
+            # The first data request, its login, then the second data
+            # request alone.
+            assert respx.calls.call_count - logins == 3
+
+
 class TestLoginRequest:
     """The password and OTP code travel in a POST body, as the official
     client sends them. In the URL they landed in every proxy's and DSM's

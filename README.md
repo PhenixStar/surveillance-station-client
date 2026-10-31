@@ -221,7 +221,7 @@ Save multiple NAS connection profiles and switch between them from the login scr
 <details>
 <summary><b>Secure Credentials</b></summary>
 
-Passwords stored in your system keyring (GNOME Keyring, KWallet, macOS Keychain).
+Passwords stored in your system keyring (GNOME Keyring, KWallet, macOS Keychain). When a session expires the client logs in again with the password it connected with; if the NAS refuses that login, for instance because the password was changed elsewhere, two-factor authentication now asks for a code, or the account is disabled, blocked or locked, the client stops trying until you log in again, so it never keeps sending a login that cannot succeed.
 </details>
 <details>
 <summary><b>Theming</b></summary>
