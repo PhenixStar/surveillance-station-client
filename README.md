@@ -126,6 +126,10 @@ Browse, play back, download, lock/unlock, and delete Smart Time Lapse recordings
 <details>
 <summary><b>Maps</b></summary>
 
+<p align="center">
+  <img src="assets/screenshots/maps.webp" alt="Maps page" width="100%">
+</p>
+
 Shows the E-Maps set up in Surveillance Station, read only: pick a map from the list and its image is drawn to fit the page, with a dot for every camera placed on it, green while the camera is enabled and red when it is disconnected or disabled (grey for a camera the account cannot see). Hover a dot for the camera's name, and click it to put the camera in Live View the same way a click in the camera sidebar does: into the selected slot, or alone in 1&times;1 when no slot is selected. The map last opened is remembered per connection profile. PNG, JPEG and SVG map images are drawn; one that cannot be decoded still shows its cameras on a blank map. The page says so instead when the NAS has no E-Maps or the account may not view them. Maps are created and edited in Surveillance Station itself.
 </details>
 <details>
