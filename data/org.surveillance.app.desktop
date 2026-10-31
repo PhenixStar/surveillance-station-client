@@ -5,5 +5,5 @@ Exec=surveillance
 Icon=org.surveillance.app
 Terminal=false
 Type=Application
-Categories=Video;Security;Network;
+Categories=AudioVideo;Video;Security;Network;
 Keywords=surveillance;camera;synology;nas;
