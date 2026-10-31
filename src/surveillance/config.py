@@ -125,6 +125,31 @@ class EventTypeHistory:
     checked_until: int = 0
 
 
+# What [webhooks] can send (see services.webhooks), and how long one POST
+# may take, in seconds, by default and at most.
+WEBHOOK_EVENTS = (
+    "alert",
+    "camera_offline",
+    "camera_online",
+    "home_mode",
+    "snapshot_saved",
+    "layout_changed",
+)
+DEFAULT_WEBHOOK_TIMEOUT = 3.0
+MAX_WEBHOOK_TIMEOUT = 30.0
+
+
+@dataclass
+class WebhookConfig:
+    """The [webhooks] section: where to POST which client events. No
+    targets, the default, sends nothing. Written by hand only; the
+    optional bearer token lives in the keyring, never here."""
+
+    targets: list[str] = field(default_factory=list)
+    events: list[str] = field(default_factory=lambda: list(WEBHOOK_EVENTS))
+    timeout_seconds: float = DEFAULT_WEBHOOK_TIMEOUT
+
+
 @dataclass
 class LayoutPreset:
     """A named camera set for one grid size, picked from the grid menu.
@@ -240,6 +265,7 @@ class AppConfig:
     # Same, for the Settings page's dropdowns (ChoiceSetting.key ->
     # overridden value).
     setting_overrides_choice: dict[str, str] = field(default_factory=dict)
+    webhooks: WebhookConfig = field(default_factory=WebhookConfig)
     # The profile whose camera-keyed settings are the ones held in the
     # fields above, and every other profile's, waiting their turn (see
     # PROFILE_STATE_FIELDS and activate_profile).
@@ -324,6 +350,46 @@ def _poll_interval(general: dict[str, Any], key: str, default: int) -> int:
         log.warning("Config: %s of %ds is below the %ds minimum", key, value, MIN_POLL_INTERVAL)
         return MIN_POLL_INTERVAL
     return value
+
+
+def _webhooks(section: Any) -> WebhookConfig:
+    """Read [webhooks], dropping with a warning whatever cannot be used:
+    a target that is not an http(s) URL, an event name this client never
+    sends, a timeout that is not a positive number of seconds."""
+    if not isinstance(section, dict):
+        return WebhookConfig()
+
+    targets: list[str] = []
+    raw_targets = section.get("targets", [])
+    for target in raw_targets if isinstance(raw_targets, list) else []:
+        if isinstance(target, str) and target.startswith(("http://", "https://")):
+            targets.append(target)
+        else:
+            # Not the value itself: a URL can carry credentials.
+            log.warning("Config: ignoring a webhooks target that is not an http(s) URL")
+
+    events = list(WEBHOOK_EVENTS)
+    raw_events = section.get("events")
+    if isinstance(raw_events, list):
+        events = [e for e in raw_events if e in WEBHOOK_EVENTS]
+        for unknown in (e for e in raw_events if e not in WEBHOOK_EVENTS):
+            log.warning("Config: ignoring unknown webhooks event %r", unknown)
+
+    timeout = DEFAULT_WEBHOOK_TIMEOUT
+    raw_timeout = section.get("timeout_seconds", DEFAULT_WEBHOOK_TIMEOUT)
+    if (
+        isinstance(raw_timeout, (int, float))
+        and not isinstance(raw_timeout, bool)
+        and 0 < raw_timeout <= MAX_WEBHOOK_TIMEOUT
+    ):
+        timeout = float(raw_timeout)
+    else:
+        log.warning(
+            "Config: webhooks timeout_seconds must be above 0 and at most %gs, using %gs",
+            MAX_WEBHOOK_TIMEOUT,
+            DEFAULT_WEBHOOK_TIMEOUT,
+        )
+    return WebhookConfig(targets=targets, events=events, timeout_seconds=timeout)
 
 
 def _load_theme(general: dict[str, Any]) -> str:
@@ -546,6 +612,7 @@ def _config_from_data(data: dict[str, Any]) -> AppConfig:
         setting_overrides=setting_overrides,
         setting_overrides_bool=setting_overrides_bool,
         setting_overrides_choice=setting_overrides_choice,
+        webhooks=_webhooks(data.get("webhooks")),
     )
 
 
@@ -624,6 +691,14 @@ def _write_config(config: AppConfig) -> None:
         },
         "profiles": {},
     }
+
+    # Only when set: a config that never had the section stays without one.
+    if config.webhooks != WebhookConfig():
+        data["webhooks"] = {
+            "targets": list(config.webhooks.targets),
+            "events": list(config.webhooks.events),
+            "timeout_seconds": config.webhooks.timeout_seconds,
+        }
 
     states = dict(config.profile_state)
     states[config.active_profile] = {f: getattr(config, f) for f in PROFILE_STATE_FIELDS}
