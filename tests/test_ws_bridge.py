@@ -2214,6 +2214,50 @@ class TestHistoryMode:
         assert resolved_for == [past_end]
         await bridge.stop()
 
+    async def test_a_seek_during_the_reconnect_lookup_is_kept(
+        self, connect: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A click on the timeline while the reconnect is asking what
+        covers the old target used to be overwritten by the answer, and
+        the play went out for that recording instead."""
+        rec1 = _recording(id=100, start_time=1_700_000_000, stop_time=1_700_000_200)
+        rec2 = _recording(id=200, start_time=1_700_000_150, stop_time=1_700_002_000)
+        fake1 = _FakeWS([_codec_frame()])  # exhausted, no hang -> clean close -> reconnect
+        fake2 = _FakeWS([_codec_frame()], hang=True)
+        connect([fake1, fake2])
+        target = rec1.start_time + 50
+        clock = [float(target + 20)]
+        monkeypatch.setattr(ws_bridge.time, "time", lambda: clock[0])
+        asked = asyncio.Event()
+        answer = asyncio.Event()
+
+        async def resolver(t: int) -> Recording:
+            asked.set()
+            await answer.wait()
+            return rec2
+
+        bridge = WebSocketBridge(
+            "wss://nas/stream",
+            False,
+            "sid",
+            history_recording=rec1,
+            history_target=target,
+            history_resolver=resolver,
+        )
+        clock[0] = float(rec1.stop_time + 30 + 20)  # drifted past rec1's own end
+        start = asyncio.create_task(bridge.start())
+        await asyncio.wait_for(asked.wait(), timeout=5.0)
+        await bridge.seek(rec1, rec1.start_time + 30)
+        answer.set()
+        await _wait_until(lambda: any("action=play" in str(m) for m in fake2.sent))
+        play = next(m for m in fake2.sent if "action=play" in str(m))
+        assert dict(parse_qsl(play))["id"] == str(rec1.id)
+        assert bridge._history_recording is rec1
+        start.cancel()
+        with contextlib.suppress(asyncio.CancelledError, RuntimeError):
+            await start
+        await bridge.stop()
+
     async def test_reconnect_skips_the_resolver_while_still_within_the_loaded_recording(
         self, connect: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:

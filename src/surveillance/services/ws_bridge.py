@@ -443,6 +443,9 @@ class WebSocketBridge:
         self._history_anchor_at: float = 0.0
         self._anchor_history_position(history_target)
         self._history_stamp = 0
+        # Bumped by every seek(), so a lookup that was out across one
+        # knows its answer is about where playback was before it.
+        self._seek_count = 0
         # True while pause()/resume() has this bridge paused -- Live and
         # History act on it differently (see both methods' docstrings),
         # so it means "don't write frames to the pipe" for one and "DSM
@@ -1721,8 +1724,9 @@ class WebSocketBridge:
         target = self._current_history_target()
         if rec.start_time <= target <= rec.stop_time:
             return
+        seeks = self._seek_count
         fresh = await self._history_resolver(target)
-        if fresh is not None:
+        if fresh is not None and self._seek_count == seeks:
             self._history_recording = fresh
             # self._last_video_msec belongs to the recording just
             # swapped out -- interpreted against the new one's
@@ -1957,6 +1961,7 @@ class WebSocketBridge:
         for the caller to reflect on its own UI rather than assuming
         target_unix was used as-is.
         """
+        self._seek_count += 1
         was_paused = self._paused
         self._paused = False
         if was_paused:
