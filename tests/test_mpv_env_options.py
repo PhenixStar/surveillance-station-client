@@ -144,6 +144,9 @@ def _constructed(
         def _mpv_update_cb(self) -> None:
             pass
 
+        def _on_hwdec_current(self, name: str, value: Any) -> None:
+            pass
+
         def _on_video_size(self, name: str, value: Any) -> None:
             pass
 
