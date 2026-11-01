@@ -458,6 +458,11 @@ class MpvGLArea(Gtk.GLArea):
             self._mpv = mpv.MPV(*extra_flags, log_handler=self._mpv_log, **options)
             self._mpv.observe_property("dwidth", self._on_video_size)
             self._mpv.observe_property("dheight", self._on_video_size)
+            # Say which decoder each stream really landed on: with hwdec=auto a
+            # GPU whose device creation failed (CUDA out of memory while the
+            # page cache is full, seen on the GB10 wall) silently decodes in
+            # software, and only this property tells.
+            self._mpv.observe_property("hwdec-current", self._on_hwdec_current)
 
             version = str(getattr(self._mpv, "mpv_version", ""))
             if _mpv_leaks_vsync_fences(version):
@@ -588,6 +593,18 @@ class MpvGLArea(Gtk.GLArea):
             glBindFramebuffer(GL_FRAMEBUFFER, fbo)
             return False
         return True
+
+    def _on_hwdec_current(self, _name: str, value: object) -> None:
+        """Log the decoder mpv settled on for this widget's stream."""
+        try:
+            source = self._mpv.path or ""
+        except Exception:  # a property read during teardown
+            source = ""
+        if not value or value == "no":
+            if value == "no":
+                log.warning("Decoding in software (hwdec-current=no) for %s", source)
+            return
+        log.info("Hardware decoding via %s for %s", value, source)
 
     def _on_video_size(self, name: str, value: Any) -> None:
         """dwidth/dheight observer, called on mpv's event thread.
