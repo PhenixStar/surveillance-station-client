@@ -79,6 +79,18 @@ def delete_credentials(profile_name: str) -> None:
         keyring.delete_password(SERVICE_NAME, f"{profile_name}:password")
 
 
+def webhook_token(url: str) -> str | None:
+    """The bearer token for the webhook target *url* (see
+    services.webhooks), or None if there is none or the keyring is
+    unavailable or locked."""
+    try:
+        token: str | None = keyring.get_password(SERVICE_NAME, f"webhook_token:{url}")
+    except keyring.errors.KeyringError as e:
+        log.debug("No webhook token from the keyring: %s", e)
+        return None
+    return token
+
+
 # The blocking versions above talk to the Secret Service over D-Bus. A
 # locked collection makes that call wait until the user answers the
 # unlock prompt, and no timeout is set anywhere in the stack, so calling

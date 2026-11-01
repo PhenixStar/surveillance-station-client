@@ -45,9 +45,11 @@ if TYPE_CHECKING:
 # failed before or after the thing being blamed for it.
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
-# Credentials the client sends as query parameters.
+# Credentials the client sends as query parameters, and StmKey, which
+# the stream paths DSM hands out carry (quoted in the MJPEG one) and
+# which is also the password in its rtsp://admin:<key>@ paths.
 _REDACT_PARAMS = re.compile(
-    r"\b(passwd|password|account|otp_code|device_id|_sid)=[^&\s\"']+",
+    r"\b(passwd|password|account|otp_code|device_id|_sid|StmKey)=([\"']?)[^&\s\"']+",
     re.IGNORECASE,
 )
 
@@ -70,7 +72,7 @@ class _RedactFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
-        text = _REDACT_PARAMS.sub(r"\1=***", super().format(record))
+        text = _REDACT_PARAMS.sub(r"\1=\2***", super().format(record))
         return _REDACT_USERINFO.sub(r"\1***@", text)
 
 

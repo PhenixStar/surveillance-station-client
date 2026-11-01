@@ -1,4 +1,4 @@
-.TH SURVEILLANCE 1 "2026-10-21" "0.15.0" "User Commands"
+.TH SURVEILLANCE 1 "2026-11-01" "0.16.1" "User Commands"
 .SH NAME
 surveillance \- Synology Surveillance Station client
 .SH SYNOPSIS
@@ -11,7 +11,7 @@ surveillance \- Synology Surveillance Station client
 .IR LAYOUT ]
 .RB [ \-\-camera
 .I ID
-.RB [ \-\-fullscreen ]]
+.RB [ \-\-solo ]]
 .RB [ \-\-seek
 .IR TIME " | " \-\-live ]
 .RB [ \-\-page
@@ -80,7 +80,7 @@ as that happens. In History mode a gap is filled with silence instead,
 since DSM sends no audio at some playback speeds or in reverse. Sound
 returns automatically when DSM resumes sending audio at supported playback
 speeds.
-Cameras with a speaker also show a push-to-talk microphone button — tap to
+Cameras with a speaker also show a push-to-talk microphone button \(em tap to
 start talking, tap again to stop.
 Video is rendered via mpv with hardware acceleration.
 While a slot plays recorded video from close to the live edge, the client
@@ -244,6 +244,14 @@ click-and-drag panning.
 .B Time Lapse
 Browse, play back, download, and manage Smart Time Lapse recordings.
 .TP
+.B Maps
+Show the E-Maps set up in Surveillance Station, read only, with a dot for
+every camera placed on a map: green while the camera is enabled, red when it
+is disconnected or disabled, grey for one the account cannot see. Hovering a
+dot names the camera, and clicking it puts the camera in Live View the way a
+click in the camera sidebar does. PNG, JPEG and SVG map images are drawn.
+Maps are created and edited in Surveillance Station itself.
+.TP
 .B Events
 Browse real events with their type and time, filtered by event type, camera,
 and time range. On Surveillance Station 9.3 and later, events and their types
@@ -294,8 +302,8 @@ when one is available.
 .TP
 .B \-\-debug
 Enable debug logging to stderr.
-Passwords, session tokens, usernames, one-time codes, and credentials
-embedded in stream URLs are redacted from the output, including inside
+Passwords, session tokens, usernames, one-time codes, stream keys, and
+credentials embedded in stream URLs are redacted from the output, including inside
 exception tracebacks.
 A debug run also records one line a minute giving the app's own memory
 use, open descriptor count and thread count, so a long unattended
@@ -334,7 +342,7 @@ use. The automatically named file is created mode 0600.
 .PP
 The options below control the Live View and the page shown. When the
 application is already running, a second launch hands them over to the
-running instance and exits, with status 2 if one is malformed; a first
+running instance and exits, with status 2 if a value is invalid; a first
 launch carries them out once logged in and the camera list has loaded.
 The Live View options switch to Live View first. Combined, they apply in
 the order grid, camera, seek or live, then page. Anything that cannot
@@ -360,7 +368,7 @@ Show the camera with Surveillance Station ID
 .I ID
 in the slot the timeline tracks.
 .TP
-.B \-\-fullscreen
+.B \-\-solo
 With
 .BR \-\-camera ,
 show that camera alone, in 1x1, instead.
@@ -397,6 +405,10 @@ Connection profiles define NAS host, port, HTTPS, and SSL verification settings.
 Credentials are stored securely via the system keyring. When two-factor
 authentication is enabled, trusted device tokens are stored per profile in the
 config file.
+When a session expires the client logs in again with the password it
+connected with. If the NAS refuses that login, for instance because the
+password was changed elsewhere, a two-factor code is needed, or the account
+is disabled, blocked or locked, the client stops trying until the next login.
 .PP
 The
 .B [general]
@@ -432,6 +444,8 @@ per layout
 .RI ( layout_cameras ),
 the cameras picked for searches
 .RI ( search_camera_ids ", " events_search_camera_ids ", " snapshots_search_camera_ids ),
+the E-Map last opened on the Maps page
+.RI ( last_emap_id ),
 and the sections below. A config from an earlier version kept one shared
 set at the top level and in
 .BR [session] ;
@@ -538,6 +552,34 @@ Station 9.3 from the next login, for testing), split
 by value type since TOML distinguishes numbers, booleans and text. Written by
 the Settings page itself; use its own reset buttons rather than
 hand-editing these.
+.PP
+The
+.B [webhooks]
+section, set by hand only, makes the client POST what it sees as JSON to
+each URL in
+.IR targets :
+the events listed in
+.IR events ,
+out of
+.BR alert ,
+.BR camera_offline ,
+.BR camera_online ,
+.BR home_mode ,
+.B snapshot_saved
+and
+.B layout_changed
+(all six by default), each POST taking at most
+.I timeout_seconds
+(3 by default, 30 at most). With no targets nothing is sent. The section
+is read at startup and written back as it was then on every save, so edit
+it with the application closed. A target is sent an
+.B Authorization: Bearer
+header when the keyring holds a token for it, under the service
+.I surveillance-station
+as
+.I webhook_token:
+followed by the target URL as written in
+.IR targets .
 .SH KEYBOARD SHORTCUTS
 .TP
 .B Ctrl+Q

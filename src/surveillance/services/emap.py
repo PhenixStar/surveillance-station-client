@@ -48,7 +48,7 @@ As Surveillance Station 9.3 answers them:
   ``items`` (``{"list": [...]}``) it REPLACES the map's whole item list,
   so every item the map should keep has to be in it.
 - ``SYNO.SurveillanceStation.Emap`` v1 ``Delete`` with ``emapIds``: removes
-  the map (the one call here not yet seen live).
+  the map.
 
 String parameters go JSON-encoded, quotes included, the way Surveillance
 Station's own web UI sends them. Save goes as a POST: its image data and
@@ -82,12 +82,22 @@ UPLOAD_FIELD = "emapImg"
 # request() makes for it: the account may not see E-Maps.
 _UNAVAILABLE_CODES = (102, 103, 104, 105)
 
+# The only Emap Load whose items this client reads (refItemIdOnHost, lng,
+# lat). request() lowers a version the NAS does not offer, and the v1
+# Load the API guide documents answers with uniqueId, x and y instead, so
+# every marker would be dropped without a word.
+_LOAD_VERSION = 2
+
+
+class EMapsTooOldError(Exception):
+    """The NAS's Emap API stops before the Load this client reads."""
+
 
 def emaps_unavailable(error: BaseException) -> bool:
     """True when *error* means this NAS or account has no E-Maps at all,
     rather than one call failing. A failed re-login counts too, so the page
     does not log in again on every visit; the next connect starts over."""
-    if isinstance(error, SessionExpiredError):
+    if isinstance(error, (SessionExpiredError, EMapsTooOldError)):
         return True
     return isinstance(error, ApiError) and error.code in _UNAVAILABLE_CODES
 
@@ -198,7 +208,11 @@ class EMapService:
         self._images.clear()
 
     async def list_maps(self) -> list[EMap]:
-        """Every map, without its items."""
+        """Every map, without its items. Raises EMapsTooOldError, before
+        asking anything, when the NAS cannot load a map's items."""
+        version = self.api._get_api_version(EMAP_API, _LOAD_VERSION)
+        if version < _LOAD_VERSION:
+            raise EMapsTooOldError(f"{EMAP_API} goes up to version {version} only")
         data = await self.api.request(api=EMAP_API, method="List", version=1)
         return parse_maps(data)
 
@@ -210,7 +224,7 @@ class EMapService:
         data = await self.api.request(
             api=EMAP_API,
             method="Load",
-            version=2,
+            version=_LOAD_VERSION,
             extra_params={"emapIds": json.dumps(str(emap_id))},
         )
         emap = parse_map(data)

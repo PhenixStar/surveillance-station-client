@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import gi
 
@@ -44,6 +44,8 @@ from surveillance.ui.layouts import valid_layout
 from surveillance.ui.sidebar import CameraSidebar
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from surveillance.app import RemoteRequest, SurveillanceApp
     from surveillance.services.transactions import Transaction
     from surveillance.ui.liveview import LiveView
@@ -239,7 +241,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if self.app.api:
             webhooks.start(self.app.config.webhooks, self.app.api.profile.name)
         self._setup_content_pages()
-        self.sidebar.refresh(on_complete=self._restore_live_session)
+        self.sidebar.refresh()
         self.sidebar.start_polling()
         self._start_polling()
         self._check_for_update()
@@ -363,7 +365,7 @@ class MainWindow(Gtk.ApplicationWindow):
             if camera is None:
                 log.warning("No camera with ID %d", request.camera_id)
             else:
-                live.show_camera(camera, fullscreen=request.fullscreen)
+                live.show_camera(camera, solo=request.solo)
         if request.seek is not None:
             live.seek_to(request.seek)
         elif request.live:
@@ -427,6 +429,12 @@ class MainWindow(Gtk.ApplicationWindow):
         if live_view and hasattr(live_view, "sync_camera_statuses"):
             live_view.sync_camera_statuses(cameras)
         webhooks.note_cameras(cameras)
+        # On the first list that loads, not only the one asked for at
+        # login: when that one failed, the poll that filled the sidebar
+        # later restored nothing, and every command line request was
+        # held until logout.
+        if not self._live_session_ready:
+            self._restore_live_session(cameras)
 
     def _on_home_mode(self, on: bool) -> None:
         self.headerbar.set_home_mode(on)
@@ -435,6 +443,22 @@ class MainWindow(Gtk.ApplicationWindow):
     def _on_unread_alerts(self, count: int) -> None:
         self.headerbar.set_notification_count(count)
         webhooks.note_unread_alerts(count)
+
+    def _for_session(self, handler: Callable[[Any], None]) -> Callable[[Any], None]:
+        """*handler*, for a poll's answer, run only while the session it
+        asked is still the one logged in.
+
+        An answer from the NAS logged out of could land after the next
+        login: it became the next profile's webhook baseline, set its
+        header, or switched its polling off.
+        """
+        api = self.app.api
+
+        def _run(value: Any) -> None:
+            if self.app.api is api:
+                handler(value)
+
+        return _run
 
     def _start_polling(self) -> None:
         """Start background polling for alerts and home mode."""
@@ -468,8 +492,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
             run_async(
                 get_homemode(self.app.api),
-                callback=lambda info: self._on_home_mode(info.on),
-                error_callback=_homemode_error,
+                callback=self._for_session(lambda info: self._on_home_mode(info.on)),
+                error_callback=self._for_session(_homemode_error),
             )
             return True
 
@@ -498,8 +522,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
             run_async(
                 count_unread_alerts(self.app.api),
-                callback=self._on_unread_alerts,
-                error_callback=_alerts_error,
+                callback=self._for_session(self._on_unread_alerts),
+                error_callback=self._for_session(_alerts_error),
             )
             return True
 
@@ -607,7 +631,11 @@ class MainWindow(Gtk.ApplicationWindow):
             # nothing is paired at all.
             if paired is not None and not shown & set(paired.values()):
                 return True
-            run_async(_fetch(shown, paired), callback=_apply, error_callback=_transactions_error)
+            run_async(
+                _fetch(shown, paired),
+                callback=self._for_session(_apply),
+                error_callback=self._for_session(_transactions_error),
+            )
             return True
 
         self._transactions_poll_id = GLib.timeout_add_seconds(

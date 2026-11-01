@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import re
 from collections.abc import AsyncIterator, Iterator
@@ -37,6 +38,7 @@ import keyring.errors
 import pytest
 import respx
 
+from surveillance import credentials
 from surveillance.api.models import Camera, CameraStatus
 from surveillance.config import WEBHOOK_EVENTS, WebhookConfig
 from surveillance.services import webhooks
@@ -53,7 +55,7 @@ def _camera(camera_id: int, status: CameraStatus = CameraStatus.ENABLED) -> Came
 @pytest.fixture(autouse=True)
 def no_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """No keyring in tests unless one asks for a token."""
-    monkeypatch.setattr(webhooks, "webhook_token", lambda profile: None)
+    monkeypatch.setattr(webhooks, "webhook_token", lambda url: None)
 
 
 @pytest.fixture
@@ -112,18 +114,21 @@ class TestPayload:
     ) -> None:
         asked: list[str] = []
 
-        def _token(profile: str) -> str:
-            asked.append(profile)
-            return "s3cret"
+        def _token(url: str) -> str | None:
+            asked.append(url)
+            return "s3cret" if url == TARGET else None
 
         monkeypatch.setattr(webhooks, "webhook_token", _token)
         with respx.mock(assert_all_called=False) as mock:
             route = mock.post(TARGET).respond(200)
-            dispatcher = make_dispatcher()  # type: ignore[operator]
+            other = mock.post(OTHER_TARGET).respond(200)
+            dispatcher = make_dispatcher([TARGET, OTHER_TARGET])  # type: ignore[operator]
             dispatcher.emit("alert")
             await dispatcher.wait_idle()
-        assert asked == ["test-nas"]
+        assert asked == [TARGET, OTHER_TARGET]
         assert route.calls[0].request.headers["authorization"] == "Bearer s3cret"
+        # The other receiver never sees a token that is not its own.
+        assert "authorization" not in other.calls[0].request.headers
 
     async def test_every_target_gets_the_event(self, make_dispatcher: object) -> None:
         with respx.mock(assert_all_called=False) as mock:
@@ -177,6 +182,39 @@ class TestDelivery:
             dispatcher.emit("alert")
             await dispatcher.wait_idle()
         assert caplog.text.count("takes events again") == 1
+
+    async def test_timeout_seconds_caps_the_whole_post(
+        self, make_dispatcher: object, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """httpx's timeout is per network wait. A receiver answering a byte
+        at a time stayed under it and held the target for as long as it
+        liked, while the docs promise at most timeout_seconds."""
+
+        async def _drip(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\n")
+            with contextlib.suppress(ConnectionError):
+                for _ in range(6):
+                    await writer.drain()
+                    await asyncio.sleep(0.15)
+                    writer.write(b"x")
+                writer.close()
+
+        server = await asyncio.start_server(_drip, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        try:
+            dispatcher = make_dispatcher(  # type: ignore[operator]
+                [f"http://127.0.0.1:{port}/hook"], timeout_seconds=0.3
+            )
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            dispatcher.emit("alert")
+            await dispatcher.wait_idle()
+            took = loop.time() - started
+        finally:
+            server.close()
+        assert "failed on alert (TimeoutError)" in caplog.text
+        assert took < 0.8
 
     async def test_a_target_down_does_not_hold_up_another(self, make_dispatcher: object) -> None:
         release = asyncio.Event()
@@ -292,7 +330,7 @@ class TestModuleSwitch:
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        def _broken(profile: str) -> str:
+        def _broken(url: str) -> str:
             raise RuntimeError("no backend")
 
         monkeypatch.setattr(webhooks, "webhook_token", _broken)
@@ -311,17 +349,17 @@ class TestHelpers:
         def _fail(service: str, name: str) -> str:
             raise keyring.errors.KeyringError("locked")
 
-        monkeypatch.setattr(webhooks.keyring, "get_password", _fail)
-        assert webhooks.webhook_token("test-nas") is None
+        monkeypatch.setattr(credentials.keyring, "get_password", _fail)
+        assert webhooks.webhook_token(TARGET) is None
 
     def test_token_item_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.undo()
         asked: list[tuple[str, str]] = []
         monkeypatch.setattr(
-            webhooks.keyring, "get_password", lambda s, n: asked.append((s, n)) or "t"
+            credentials.keyring, "get_password", lambda s, n: asked.append((s, n)) or "t"
         )
-        assert webhooks.webhook_token("test-nas") == "t"
-        assert asked == [("surveillance-station", "test-nas:webhook_token")]
+        assert webhooks.webhook_token(TARGET) == "t"
+        assert asked == [("surveillance-station", f"webhook_token:{TARGET}")]
 
     def test_every_event_is_on_by_default(self) -> None:
         assert WebhookConfig().events == list(WEBHOOK_EVENTS)

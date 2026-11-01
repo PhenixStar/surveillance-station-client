@@ -139,3 +139,55 @@ class TestProfileSwitch:
         LoginDialog._on_profile_changed(dialog, dialog.profile_combo)
         assert dialog.port_entry.value == "5001"
         assert (dialog.https_check.value, dialog.verify_ssl_check.value) == (True, False)
+
+
+class TestCancelledTwoFactor:
+    """Cancelling the two-factor dialog closes the client, but the login
+    it was waiting on still runs to the end."""
+
+    @staticmethod
+    def _dialog(current_api: Any) -> Any:
+        from unittest.mock import MagicMock
+
+        return SimpleNamespace(
+            _dismissed=False,
+            _current_api=current_api,
+            app=SimpleNamespace(config=SimpleNamespace(), set_api=MagicMock()),
+            remember_check=SimpleNamespace(get_active=lambda: False),
+            get_transient_for=lambda: None,
+            close=lambda: None,
+        )
+
+    @pytest.fixture
+    def scheduled(self, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+        calls: list[Any] = []
+
+        def _run_async(coro: Coroutine[Any, Any, Any], **_kwargs: Any) -> None:
+            calls.append(coro)
+            coro.close()
+
+        monkeypatch.setattr(login, "run_async", _run_async)
+        monkeypatch.setattr(login, "add_profile", lambda *_args: None)
+        return calls
+
+    @staticmethod
+    def _result(api: Any) -> tuple[Any, ...]:
+        return api, ConnectionProfile("home", "192.168.1.10"), "alice", "pw", object()
+
+    def test_a_login_that_lands_after_cancel_is_dropped(self, scheduled: list[Any]) -> None:
+        from unittest.mock import MagicMock
+
+        api = MagicMock(device_id="")
+        dialog = self._dialog(current_api=None)  # what _on_otp_cancel leaves
+        LoginDialog._on_connect_success(dialog, self._result(api))
+        dialog.app.set_api.assert_not_called()
+        assert api.close.called
+
+    def test_the_login_still_asked_for_connects(self, scheduled: list[Any]) -> None:
+        from unittest.mock import MagicMock
+
+        api = MagicMock(device_id="")
+        dialog = self._dialog(current_api=api)
+        LoginDialog._on_connect_success(dialog, self._result(api))
+        dialog.app.set_api.assert_called_once()
+        assert dialog._current_api is None

@@ -26,9 +26,9 @@
 """Outgoing webhooks: tell other systems what the client sees.
 
 Each event the [webhooks] section asks for is POSTed as JSON to every
-target there, with an optional bearer token kept in the keyring under
-"<profile>:webhook_token". Unlike every other service module this talks
-to the receivers, not to the NAS.
+target there, each with its own optional bearer token, kept in the
+keyring under "webhook_token:<target URL>". Unlike every other service
+module this talks to the receivers, not to the NAS.
 
 Fire-and-forget: the GTK side only hands an event over to the asyncio
 bridge's loop, where each target has a bounded queue and a worker of its
@@ -47,32 +47,17 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-import keyring
-import keyring.errors
 
 from surveillance.api.models import Camera, CameraStatus
 from surveillance.config import WebhookConfig
+from surveillance.credentials import webhook_token
 from surveillance.util.async_bridge import get_loop
 
 log = logging.getLogger(__name__)
 
-# The keyring service the login credentials are kept under too.
-_KEYRING_SERVICE = "surveillance-station"
-
 # Events held per target while it is slow or down; beyond that the
 # oldest is dropped.
 QUEUE_SIZE = 64
-
-
-def webhook_token(profile: str) -> str | None:
-    """The bearer token for *profile*'s webhooks, None when there is none
-    or no keyring to ask. Blocks while a locked keyring asks to be
-    unlocked, so never call it on the GTK main thread."""
-    try:
-        return keyring.get_password(_KEYRING_SERVICE, f"{profile}:webhook_token")
-    except keyring.errors.KeyringError as e:
-        log.debug("No webhook token from the keyring: %s", e)
-        return None
 
 
 def redacted(url: str) -> str:
@@ -92,11 +77,13 @@ def _now() -> str:
 
 
 class _Target:
-    """One receiver: its queue, the worker emptying it, and whether it
-    is currently failing (logged once per spell)."""
+    """One receiver: its queue, the worker emptying it, its own token's
+    header if any, and whether it is currently failing (logged once per
+    spell)."""
 
     def __init__(self, url: str, queue_size: int) -> None:
         self.url = url
+        self.headers: dict[str, str] = {}
         self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=queue_size)
         self.task: asyncio.Task[None] | None = None
         self.failing = False
@@ -114,19 +101,25 @@ class _Target:
                 self.overflowing = True
         self.queue.put_nowait(payload)
 
-    async def run(self, client: httpx.AsyncClient) -> None:
+    async def run(self, client: httpx.AsyncClient, timeout: float) -> None:
         while True:
             payload = await self.queue.get()
             try:
-                await self._post(client, payload)
+                await self._post(client, payload, timeout)
             finally:
                 self.queue.task_done()
             if self.queue.empty():
                 self.overflowing = False
 
-    async def _post(self, client: httpx.AsyncClient, payload: dict[str, Any]) -> None:
+    async def _post(
+        self, client: httpx.AsyncClient, payload: dict[str, Any], timeout: float
+    ) -> None:
         try:
-            response = await client.post(self.url, json=payload)
+            # On the whole POST: httpx's own timeout limits each wait on
+            # the network, so a receiver answering a byte at a time held
+            # this target's queue up for as long as it liked.
+            async with asyncio.timeout(timeout):
+                response = await client.post(self.url, json=payload, headers=self.headers)
             response.raise_for_status()
         except Exception as e:
             # The type and status only: an exception's text quotes the
@@ -189,12 +182,15 @@ class WebhookDispatcher:
             # Nothing awaits this task, so whatever ends it is logged
             # here or nowhere. Cancellation, from stop(), is not caught.
             try:
-                token = await asyncio.to_thread(webhook_token, self._profile)
-                headers = {"Authorization": f"Bearer {token}"} if token else {}
-                async with httpx.AsyncClient(
-                    timeout=self._settings.timeout_seconds, headers=headers
-                ) as client:
-                    await asyncio.gather(*(target.run(client) for target in self._targets))
+                # Per target, never on the client they share: a token
+                # is for its own receiver only.
+                for target in self._targets:
+                    token = await asyncio.to_thread(webhook_token, target.url)
+                    if token:
+                        target.headers = {"Authorization": f"Bearer {token}"}
+                async with httpx.AsyncClient(timeout=self._settings.timeout_seconds) as client:
+                    timeout = self._settings.timeout_seconds
+                    await asyncio.gather(*(target.run(client, timeout) for target in self._targets))
             except Exception:
                 log.exception("Webhooks stopped")
 

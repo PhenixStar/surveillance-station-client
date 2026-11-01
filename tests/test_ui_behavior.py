@@ -31,6 +31,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -300,6 +301,29 @@ class TestPresetRange:
         from_ts, to_ts = preset_range("last24h")
         diff_hours = (to_ts - from_ts) / 3600
         assert 23.9 <= diff_hours <= 24.1
+
+    @pytest.mark.parametrize("day", [(2026, 3, 29), (2026, 10, 25)])
+    def test_last24h_is_24_hours_on_a_day_the_clocks_change(
+        self, day: tuple[int, int, int], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import time
+
+        from surveillance.services import recording
+
+        class _Now(datetime):
+            @classmethod
+            def now(cls, tz: Any = None) -> _Now:
+                return cls(*day, 12, 0)
+
+        monkeypatch.setattr(recording, "datetime", _Now)
+        monkeypatch.setenv("TZ", "Europe/Brussels")
+        time.tzset()
+        try:
+            from_ts, to_ts = recording.preset_range("last24h")
+        finally:
+            monkeypatch.undo()
+            time.tzset()
+        assert to_ts - from_ts == 24 * 3600
 
     def test_last7d_range_is_full_days(self) -> None:
         self._assert_full_days_back("last7d", 7)
@@ -1527,3 +1551,63 @@ class TestCameraSettingsUnknownProtocol:
         cam = Camera(id=3, name="Till", model="m", vendor="v", status=1)
         dialog = object.__new__(CameraSettingsDialog)
         CameraSettingsDialog.__init__(dialog, window, cam)  # type: ignore[arg-type]
+
+
+class TestPollAnswersAcrossSessions:
+    """A poll answer can land after logging out and into another NAS."""
+
+    def test_an_answer_for_the_previous_session_is_dropped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from gi.repository import GLib
+
+        from surveillance.api.client import ApiError
+        from surveillance.ui import liveview
+        from surveillance.ui.window import MainWindow
+        from surveillance.util import async_bridge
+
+        calls: list[tuple[Any, Any, Any]] = []
+
+        def _run_async(coro: Any, callback: Any = None, error_callback: Any = None) -> None:
+            coro.close()
+            calls.append((coro, callback, error_callback))
+
+        monkeypatch.setattr(async_bridge, "run_async", _run_async)
+        monkeypatch.setattr(GLib, "timeout_add_seconds", lambda *_a: 1)
+        monkeypatch.setattr(liveview, "_RECEIPT_ENABLED", True)
+        live = MagicMock(spec=liveview.LiveView)
+        live.displayed_camera_ids.return_value = {1}
+        old_api = MagicMock()
+        window = SimpleNamespace(
+            app=SimpleNamespace(api=old_api, config=AppConfig()),
+            stack=SimpleNamespace(get_child_by_name=lambda _name: live),
+            _stop_polling=lambda: None,
+            _on_home_mode=MagicMock(),
+            _on_unread_alerts=MagicMock(),
+            _transactions_available=True,
+            _pos_cameras=None,
+            _pos_cameras_at=0.0,
+            _seen_transactions={},
+        )
+        window._for_session = lambda h: MainWindow._for_session(window, h)  # type: ignore[attr-defined]
+        window._start_transactions_polling = (  # type: ignore[attr-defined]
+            lambda: MainWindow._start_transactions_polling(window)
+        )
+        MainWindow._start_polling(window)  # type: ignore[arg-type]
+        assert len(calls) == 3, "home mode, alerts and receipts each asked once"
+
+        window.app.api = MagicMock()  # logged out, then into another NAS
+        (_c, home, home_error), (_c2, alerts, alerts_error), (_c3, receipts, _e) = calls
+        home(SimpleNamespace(on=True))
+        alerts(50)
+        receipts(({7: 1}, (0, [])))
+        home_error(ApiError(102, ""))
+        alerts_error(ApiError(102, ""))
+        window._on_home_mode.assert_not_called()
+        window._on_unread_alerts.assert_not_called()
+        assert window._pos_cameras is None
+        assert window._homemode_available and window._alerts_available
+
+        window.app.api = old_api  # the same session still: delivered
+        alerts(50)
+        window._on_unread_alerts.assert_called_once_with(50)

@@ -443,6 +443,9 @@ class WebSocketBridge:
         self._history_anchor_at: float = 0.0
         self._anchor_history_position(history_target)
         self._history_stamp = 0
+        # Bumped by every seek(), so a lookup that was out across one
+        # knows its answer is about where playback was before it.
+        self._seek_count = 0
         # True while pause()/resume() has this bridge paused -- Live and
         # History act on it differently (see both methods' docstrings),
         # so it means "don't write frames to the pipe" for one and "DSM
@@ -690,14 +693,16 @@ class WebSocketBridge:
         if muxable:
             try:
                 await self._start_muxed(video_codec, audio_codec)
-            except OSError:
+            except OSError as exc:
                 # No ffmpeg on PATH, or it could not be executed. Audio is
                 # the optional half here: this camera played video-only
                 # before the muxer existed, so drop to that rather than
                 # taking the whole stream down with it.
                 log.warning(
-                    "WebSocket bridge for %s: cannot run ffmpeg, streaming video without audio",
+                    "WebSocket bridge for %s: cannot run ffmpeg (%s), "
+                    "streaming video without audio",
                     self._label,
+                    exc,
                 )
                 muxable = False
         if not muxable:
@@ -911,11 +916,17 @@ class WebSocketBridge:
         await asyncio.sleep(_FFMPEG_START_GRACE)
         if self._ffmpeg_proc.returncode is not None:
             code = self._ffmpeg_proc.returncode
+            # The reason is the last thing ffmpeg printed, there to read
+            # only on a debug run, which is the only run that pipes it.
+            said = ""
+            if self._ffmpeg_proc.stderr is not None:
+                lines = (await self._ffmpeg_proc.stderr.read()).decode(errors="replace")
+                said = lines.strip().rsplit("\n", 1)[-1]
             # Dropped, not kept: the camera falls back to a raw pipe mpv
             # reads, and _stall_detail would describe that pipe as
             # ffmpeg's output.
             self._ffmpeg_proc = None
-            raise OSError(f"ffmpeg exited at once with code {code}")
+            raise OSError(f"ffmpeg exited at once with code {code}" + (f": {said}" if said else ""))
         self._ffmpeg_watch = asyncio.create_task(self._watch_ffmpeg(self._ffmpeg_proc))
         if self._ffmpeg_proc.stderr is not None:
             self._ffmpeg_stderr = asyncio.create_task(
@@ -1103,10 +1114,11 @@ class WebSocketBridge:
         )
         try:
             await self._start_muxed(self._pending_video_codec, self._audio_codec)
-        except OSError:
+        except OSError as exc:
             log.warning(
-                "WebSocket bridge for %s: cannot run ffmpeg, streaming video without audio",
+                "WebSocket bridge for %s: cannot run ffmpeg (%s), streaming video without audio",
                 self._label,
+                exc,
             )
             await self._fall_back_to_video_only()
             return
@@ -1321,7 +1333,12 @@ class WebSocketBridge:
         every frame of every camera.
         """
         media_type = fields.get("mediaType")
-        if self._paused and not self.is_history:
+        # Not while AAC detection is still collecting: a bridge started
+        # under a Live View pause would otherwise see no audio, give up
+        # on it at the deadline and play video only for good. What
+        # detection buffers is flushed through _write_pipe, which drops
+        # it while paused, so no pipe fills behind the pause.
+        if self._paused and not self.is_history and not self._aac.detecting:
             self._discard_paused_frame(media_type)
             return
         if media_type == "1":
@@ -1716,8 +1733,9 @@ class WebSocketBridge:
         target = self._current_history_target()
         if rec.start_time <= target <= rec.stop_time:
             return
+        seeks = self._seek_count
         fresh = await self._history_resolver(target)
-        if fresh is not None:
+        if fresh is not None and self._seek_count == seeks:
             self._history_recording = fresh
             # self._last_video_msec belongs to the recording just
             # swapped out -- interpreted against the new one's
@@ -1952,6 +1970,7 @@ class WebSocketBridge:
         for the caller to reflect on its own UI rather than assuming
         target_unix was used as-is.
         """
+        self._seek_count += 1
         was_paused = self._paused
         self._paused = False
         if was_paused:
@@ -2192,7 +2211,14 @@ class WebSocketBridge:
             target = self._current_history_target()
             if rec.stop_time - target > _HISTORY_TAIL_MARGIN:
                 continue  # still well inside the recording, nothing to ask
-            fresh = await resolver(target)
+            try:
+                fresh = await resolver(target)
+            except Exception as exc:
+                # A NAS that did not answer this time may next time.
+                # Raised, it ended this task, and nothing watched the
+                # tail again for the rest of the stream.
+                log.debug("WebSocket bridge for %s: recording lookup failed: %s", self._label, exc)
+                continue
             if self._history_recording is not rec:
                 # A seek moved playback to another recording while the
                 # lookup was out; this answer is about the old one.

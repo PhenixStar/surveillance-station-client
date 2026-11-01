@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -37,12 +39,13 @@ import respx
 
 from surveillance.api.auth import SessionExpiredError
 from surveillance.api.client import ApiError, SurveillanceAPI
-from surveillance.api.models import Camera, CameraStatus, EMap, EMapItem
+from surveillance.api.models import ApiInfo, Camera, CameraStatus, EMap, EMapItem
 from surveillance.config import ConnectionProfile
 from surveillance.services.emap import (
     EMAP_API,
     EMAP_IMAGE_API,
     EMapService,
+    EMapsTooOldError,
     emaps_unavailable,
     marker_to_pixels,
     parse_map,
@@ -341,3 +344,61 @@ class TestService:
         assert not emaps_unavailable(ApiError(119))
         assert not emaps_unavailable(httpx.ConnectError("down"))
         assert emaps_unavailable(SessionExpiredError("relogin failed"))
+
+
+class TestLoadErrorMessage:
+    @staticmethod
+    def _page() -> SimpleNamespace:
+        shown: list[str] = []
+        return SimpleNamespace(
+            _refresh_btn=MagicMock(),
+            listbox=MagicMock(),
+            _unavailable=False,
+            _listed=True,
+            shown=shown,
+            _show_message=shown.append,
+        )
+
+    def test_a_failed_relogin_says_so(self) -> None:
+        from surveillance.ui.emaps import EMapsView
+
+        page = self._page()
+        EMapsView._on_load_error(page, SessionExpiredError("relogin failed"))  # type: ignore[arg-type]
+        assert page._unavailable
+        assert "logging in to the NAS again failed" in page.shown[0]
+
+    def test_an_old_emap_api_says_so(self) -> None:
+        from surveillance.ui.emaps import EMapsView
+
+        page = self._page()
+        EMapsView._on_load_error(page, EMapsTooOldError("v1"))  # type: ignore[arg-type]
+        assert page._unavailable
+        assert "older than the one the Maps page reads" in page.shown[0]
+
+    def test_no_privilege_says_unavailable(self) -> None:
+        from surveillance.ui.emaps import EMapsView
+
+        page = self._page()
+        EMapsView._on_load_error(page, ApiError(105))  # type: ignore[arg-type]
+        assert page._unavailable
+        assert page.shown[0].startswith("E-Maps are not available")
+
+
+class TestEmapVersion:
+    def test_a_nas_without_load_v2_is_refused_before_any_request(self) -> None:
+        api = _api()
+        api._api_info[EMAP_API] = ApiInfo(path="entry.cgi", max_version=1)
+        with respx.mock(assert_all_called=False) as mock:
+            route = mock.route(host="nas").respond(200)
+            with pytest.raises(EMapsTooOldError) as exc:
+                asyncio.run(EMapService(api).list_maps())
+        assert not route.called
+        assert emaps_unavailable(exc.value)
+
+    def test_load_v2_is_enough(self) -> None:
+        api = _api()
+        api._api_info[EMAP_API] = ApiInfo(path="entry.cgi", max_version=2)
+        with respx.mock(assert_all_called=False) as mock:
+            mock.route(host="nas").mock(return_value=_ok(LIST_DATA))
+            maps = asyncio.run(EMapService(api).list_maps())
+        assert maps

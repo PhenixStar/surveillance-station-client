@@ -53,10 +53,12 @@ gi.require_version("Pango", "1.0")
 import cairo
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango  # type: ignore[import-untyped]
 
+from surveillance.api.auth import SessionExpiredError
 from surveillance.api.models import Camera, CameraStatus, EMap, EMapItem
 from surveillance.services.emap import (
     DuplicateMapNameError,
     EMapService,
+    EMapsTooOldError,
     StaleMapError,
     emaps_read_only,
     emaps_unavailable,
@@ -489,10 +491,23 @@ class EMapsView(Gtk.Box):
             self._emap = None
             self._end_edit()
             self._update_edit_controls()
-            self._show_message(
-                "E-Maps are not available: this Surveillance Station has none, "
-                "or this account may not view them."
-            )
+            if isinstance(error, SessionExpiredError):
+                # Not the NAS's E-Maps: the login request() makes for an
+                # ended session failed.
+                self._show_message(
+                    "E-Maps could not be loaded: logging in to the NAS again failed. "
+                    "Log out and back in to try again."
+                )
+            elif isinstance(error, EMapsTooOldError):
+                self._show_message(
+                    "E-Maps are not available: this Surveillance Station's E-Map "
+                    "interface is older than the one the Maps page reads."
+                )
+            else:
+                self._show_message(
+                    "E-Maps are not available: this Surveillance Station has none, "
+                    "or this account may not view them."
+                )
             return
         log.error("Failed to load E-Maps: %s", error)
         self._listed = False

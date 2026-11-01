@@ -30,6 +30,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from surveillance.config import (
     DEFAULT_WEBHOOK_TIMEOUT,
     MIN_POLL_INTERVAL,
@@ -645,6 +647,42 @@ class TestSearchPresetValidation:
         assert load_search_filters(cfg, "snapshots_search")[3] == "last7d"
 
 
+class TestSearchTimeRoundTrip:
+    @pytest.mark.parametrize("fold", [0, 1])
+    def test_the_repeated_hour_comes_back_as_saved(
+        self, fold: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When summer time ends, 02:30 happens twice. Saved without its
+        offset, the second one came back as the first, an hour early."""
+        import time
+        from datetime import datetime
+
+        from surveillance import config
+        from surveillance.config import load_search_filters, save_search_filters
+
+        monkeypatch.setattr(config, "save_config", lambda cfg: None)
+        monkeypatch.setenv("TZ", "Europe/Brussels")
+        time.tzset()
+        try:
+            ts = int(datetime(2026, 10, 25, 2, 30, fold=fold).timestamp())
+            cfg = AppConfig()
+            save_search_filters(cfg, "search", None, ts, ts + 60, "")
+            _ids, from_time, to_time, _preset = load_search_filters(cfg, "search")
+        finally:
+            monkeypatch.undo()
+            time.tzset()
+        assert (from_time, to_time) == (ts, ts + 60)
+
+    def test_a_time_saved_without_an_offset_still_loads(self) -> None:
+        from datetime import datetime
+
+        from surveillance.config import load_search_filters
+
+        cfg = AppConfig(search_from_time="2026-02-01T00:00:00")
+        expected = int(datetime(2026, 2, 1).timestamp())
+        assert load_search_filters(cfg, "search")[1] == expected
+
+
 class TestCameraVolumeRange:
     def test_a_hand_edited_volume_is_held_to_the_slider_range(self) -> None:
         cfg = _config_from_data(
@@ -715,8 +753,32 @@ class TestWebhooks:
         config.webhooks = WebhookConfig(
             targets=["http://127.0.0.1:8790/client-event"], events=["alert"], timeout_seconds=2.5
         )
+        config.webhooks.section = {
+            "targets": ["http://127.0.0.1:8790/client-event"],
+            "events": ["alert"],
+            "timeout_seconds": 2.5,
+        }
         _write_config(config)
         assert load_config().webhooks == config.webhooks
+
+    def test_written_back_as_read(self, tmp_path: Path, monkeypatch: object) -> None:
+        """What the client cannot use stays in the file, for the user to fix."""
+        import surveillance.config as cfg
+
+        config_file = tmp_path / "config.toml"
+        monkeypatch.setattr(cfg, "CONFIG_FILE", config_file)  # type: ignore[attr-defined]
+        monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)  # type: ignore[attr-defined]
+
+        section = {
+            "targets": ["https://hub.example/hook", "hub.local:8123/hook"],
+            "events": ["alert", "camera_ofline"],
+            "timeout_seconds": 60,
+        }
+        config = _config_from_data({"webhooks": section})
+        assert config.webhooks.events == ["alert"]
+        _write_config(config)
+        with open(config_file, "rb") as f:
+            assert tomllib.load(f)["webhooks"] == section
 
     def test_left_out_of_a_config_that_has_none(self, tmp_path: Path, monkeypatch: object) -> None:
         import surveillance.config as cfg

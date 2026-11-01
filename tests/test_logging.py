@@ -94,6 +94,19 @@ class TestRedaction:
         out = _emit("Opening %s", "rtsp://192.168.1.50/live@main")
         assert "rtsp://192.168.1.50/live@main" in out
 
+    def test_stream_keys(self) -> None:
+        """The RTSP over HTTP and MJPEG paths DSM hands out carry the
+        stream key, which is the password in its RTSP paths too."""
+        key = "faaa8c5e0d20b71038e35e7e3635b0ee"
+        out = _emit(
+            "Starting stream: %s %s",
+            f"rtsp://nas:5000/webman/3rdparty/SurveillanceStation/cgi/rtsp.cgi?Sms=14.unicast&DsId=0&StmKey={key}",
+            f'http://nas:5000/webapi/entry.cgi?format=mjpeg&cameraId=14&StmKey="{key}"',
+        )
+        assert key not in out
+        assert "DsId=0&StmKey=***" in out
+        assert 'cameraId=14&StmKey="***"' in out
+
     def test_traceback_is_redacted(self) -> None:
         out = _emit("stream failed", exc=ValueError("GET https://nas/x.cgi?_sid=LEAKED failed"))
         assert "LEAKED" not in out

@@ -41,6 +41,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import fcntl
+import logging
 import os
 import sys
 import threading
@@ -1239,6 +1240,33 @@ class TestAudioMuxDecision:
         assert bridge._stall_detail() == ""
         await bridge.stop()
 
+    async def test_an_ffmpeg_that_exits_at_once_says_why(
+        self, connect: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The warning used to read "cannot run ffmpeg" with nothing
+        else, as if it were missing, when it had run and refused."""
+        said = asyncio.StreamReader()
+        said.feed_data(
+            b"Unrecognized option 'max_interleave_delta'.\n"
+            b"Error splitting the argument list: Option not found\n"
+        )
+        said.feed_eof()
+        dead = _DeadFfmpegProc()
+        dead.returncode = 8
+        dead.stderr = said
+
+        async def _fake_subprocess_exec(*args: Any, **kwargs: Any) -> _FakeFfmpegProc:
+            return dead
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess_exec)
+        connect(_FakeWS([_frame(b"vdoCodec=H265&adoCodec=PCMU", b"")], hang=True))
+        bridge = WebSocketBridge("wss://nas/stream", False, "sid")
+        with caplog.at_level(logging.WARNING, logger="surveillance.services.ws_bridge"):
+            await bridge.start()
+        await bridge.stop()
+        assert bridge.audio_active is False
+        assert "code 8: Error splitting the argument list: Option not found" in caplog.text
+
     async def test_each_input_gets_the_queue_option_the_probe_settled_on(
         self, connect: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1302,6 +1330,33 @@ class TestAudioMuxDecision:
         assert bridge._ffmpeg_proc is not None
         assert bridge._aac.frame_prefix_len == 3
         assert bridge._aac.use_header_prepend is False
+        await bridge.stop()
+
+    async def test_aac_detected_on_a_live_bridge_started_paused(
+        self, connect: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Live View pauses a bridge started under its Pause before the
+        first frame. Dropping frames then starved detection, and the
+        camera played video only for the rest of the bridge."""
+
+        async def _fake_subprocess_exec(*args: Any, **kwargs: Any) -> Any:
+            if "null" in args:
+                return _FakeValidationProc(stderr=b"")
+            return await _spawn_fake_mux_holder(**kwargs)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess_exec)
+        monkeypatch.setattr(ws_bridge, "_AAC_DETECTION_TIMEOUT", 1.0)
+        frames = [_frame(b"vdoCodec=H264&adoCodec=MPEG4-GENERIC", b"")]
+        frames += [_aac_audio_frame() for _ in range(6)]
+        frames += _AAC_DETECTION_PADDING
+        connect(_FakeWS(frames, hang=True))
+
+        bridge = WebSocketBridge("wss://nas/stream", False, "sid")
+        bridge.request_pause()
+        await bridge.pause()
+        await bridge.start()
+        assert bridge.audio_active is True
+        assert bridge._ffmpeg_proc is not None
         await bridge.stop()
 
     async def test_mux_active_when_the_frame_is_split_across_the_header(
@@ -2187,6 +2242,50 @@ class TestHistoryMode:
         assert resolved_for == [past_end]
         await bridge.stop()
 
+    async def test_a_seek_during_the_reconnect_lookup_is_kept(
+        self, connect: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A click on the timeline while the reconnect is asking what
+        covers the old target used to be overwritten by the answer, and
+        the play went out for that recording instead."""
+        rec1 = _recording(id=100, start_time=1_700_000_000, stop_time=1_700_000_200)
+        rec2 = _recording(id=200, start_time=1_700_000_150, stop_time=1_700_002_000)
+        fake1 = _FakeWS([_codec_frame()])  # exhausted, no hang -> clean close -> reconnect
+        fake2 = _FakeWS([_codec_frame()], hang=True)
+        connect([fake1, fake2])
+        target = rec1.start_time + 50
+        clock = [float(target + 20)]
+        monkeypatch.setattr(ws_bridge.time, "time", lambda: clock[0])
+        asked = asyncio.Event()
+        answer = asyncio.Event()
+
+        async def resolver(t: int) -> Recording:
+            asked.set()
+            await answer.wait()
+            return rec2
+
+        bridge = WebSocketBridge(
+            "wss://nas/stream",
+            False,
+            "sid",
+            history_recording=rec1,
+            history_target=target,
+            history_resolver=resolver,
+        )
+        clock[0] = float(rec1.stop_time + 30 + 20)  # drifted past rec1's own end
+        start = asyncio.create_task(bridge.start())
+        await asyncio.wait_for(asked.wait(), timeout=5.0)
+        await bridge.seek(rec1, rec1.start_time + 30)
+        answer.set()
+        await _wait_until(lambda: any("action=play" in str(m) for m in fake2.sent))
+        play = next(m for m in fake2.sent if "action=play" in str(m))
+        assert dict(parse_qsl(play))["id"] == str(rec1.id)
+        assert bridge._history_recording is rec1
+        start.cancel()
+        with contextlib.suppress(asyncio.CancelledError, RuntimeError):
+            await start
+        await bridge.stop()
+
     async def test_reconnect_skips_the_resolver_while_still_within_the_loaded_recording(
         self, connect: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -2938,6 +3037,31 @@ class TestHistoryTailRefresh:
         finally:
             watch.cancel()
             with contextlib.suppress(asyncio.CancelledError):
+                await watch
+
+    async def test_a_failed_lookup_does_not_end_the_watching(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ws_bridge, "_HISTORY_TAIL_REFRESH_INTERVAL", 0.01)
+        rec = _recording()
+        grown = _recording(stop_time=rec.stop_time + 600)
+        answers: list[Any] = [ConnectionError("NAS busy"), grown]
+
+        async def resolver(target: int) -> Recording:
+            answer = answers.pop(0) if len(answers) > 1 else answers[0]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        bridge = self._bridge(rec, rec.stop_time - 5, resolver)
+        watch = asyncio.create_task(bridge._watch_history_tail())
+        try:
+            await _wait_until(lambda: bridge._history_recording is grown or watch.done())
+            assert not watch.done(), "one failed lookup ended the watcher"
+            assert bridge._history_recording is grown
+        finally:
+            watch.cancel()
+            with contextlib.suppress(asyncio.CancelledError, ConnectionError):
                 await watch
 
     async def test_does_not_ask_while_there_is_recording_left(

@@ -3568,11 +3568,11 @@ class LiveView(Gtk.Box):
         self._cameras = cameras
         self._restore_layout_cameras()
 
-    def show_camera(self, camera: Camera, fullscreen: bool = False) -> None:
+    def show_camera(self, camera: Camera, solo: bool = False) -> None:
         """Put *camera* in the slot the timeline tracks, or with
-        *fullscreen* show it alone in 1x1, as clicking it in the sidebar
+        *solo* show it alone in 1x1, as clicking it in the sidebar
         with no slot selected does. For the command line's --camera."""
-        if fullscreen:
+        if solo:
             self._select_slot(None)
             self.on_camera_selected(camera)
             return

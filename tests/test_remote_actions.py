@@ -47,10 +47,11 @@ class TestParseRemoteRequest:
 
     def test_each_option(self) -> None:
         request = parse_remote_request(
-            {"grid": "3x3", "camera": 12, "fullscreen": True, "page": "events"}
+            {"grid": "3x3", "camera": "12", "solo": True, "page": "events"}
         )
-        assert request == RemoteRequest(grid="3x3", camera_id=12, fullscreen=True, page="events")
+        assert request == RemoteRequest(grid="3x3", camera_id=12, solo=True, page="events")
         assert parse_remote_request({"live": True}) == RemoteRequest(live=True)
+        assert parse_remote_request({"page": "maps"}) == RemoteRequest(page="maps")
 
     def test_preset_name_is_kept(self) -> None:
         assert parse_remote_request({"preset": " Front of house "}) == RemoteRequest(
@@ -75,9 +76,12 @@ class TestParseRemoteRequest:
         "options",
         [
             {"grid": "5x5"},
-            {"camera": 0},
-            {"camera": -3},
-            {"fullscreen": True},
+            {"camera": "0"},
+            {"camera": "-3"},
+            {"camera": "abc"},
+            {"camera": ""},
+            {"camera": " 12"},
+            {"solo": True},
             {"seek": "yesterday"},
             {"seek": "2026-10-30T22:15", "live": True},
             {"page": "nowhere"},
@@ -179,12 +183,12 @@ class TestApplyRemoteRequest:
     def test_camera_into_the_focused_slot(self) -> None:
         window = _window()
         window.apply_remote_request(RemoteRequest(camera_id=12))
-        window.live.show_camera.assert_called_once_with(_camera(12), fullscreen=False)
+        window.live.show_camera.assert_called_once_with(_camera(12), solo=False)
 
-    def test_camera_fullscreen(self) -> None:
+    def test_camera_solo(self) -> None:
         window = _window()
-        window.apply_remote_request(RemoteRequest(camera_id=3, fullscreen=True))
-        window.live.show_camera.assert_called_once_with(_camera(3), fullscreen=True)
+        window.apply_remote_request(RemoteRequest(camera_id=3, solo=True))
+        window.live.show_camera.assert_called_once_with(_camera(3), solo=True)
 
     def test_unknown_camera_is_skipped(self, caplog: pytest.LogCaptureFixture) -> None:
         window = _window()
@@ -238,7 +242,21 @@ class TestApplyRemoteRequest:
         assert window._live_session_ready
         assert window._pending_remote_requests == []
         window.live.restore_session.assert_called_once()
-        window.live.show_camera.assert_called_once_with(_camera(12), fullscreen=False)
+        window.live.show_camera.assert_called_once_with(_camera(12), solo=False)
+
+    def test_restored_by_a_later_poll_when_the_first_list_failed(self) -> None:
+        """The camera list asked for at login can fail. The poll that
+        loads it later restored nothing, so the layout stayed empty and
+        every request was held until logout."""
+        window = _window(ready=False)
+        window._restore_live_session = lambda c: MainWindow._restore_live_session(window, c)
+        window.apply_remote_request(RemoteRequest(camera_id=12))
+        for _poll in range(2):
+            MainWindow._on_cameras_updated(window, [_camera(12)])
+        assert window._live_session_ready
+        assert window._pending_remote_requests == []
+        window.live.restore_session.assert_called_once()
+        window.live.show_camera.assert_called_once_with(_camera(12), solo=False)
 
 
 class TestLiveViewEntryPoints:
@@ -263,9 +281,9 @@ class TestLiveViewEntryPoints:
         LiveView.show_camera(page, _camera(12))
         assert page.calls == [("_assign_to_slot", 5, _camera(12)), ("_save_session",)]
 
-    def test_fullscreen_is_the_sidebar_click_with_no_slot_selected(self) -> None:
+    def test_solo_is_the_sidebar_click_with_no_slot_selected(self) -> None:
         page = self._page()
-        LiveView.show_camera(page, _camera(12), fullscreen=True)
+        LiveView.show_camera(page, _camera(12), solo=True)
         assert page.calls == [("_select_slot", None), ("on_camera_selected", _camera(12))]
 
     def test_seek_is_the_calendar_jump(self) -> None:

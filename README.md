@@ -130,7 +130,7 @@ Browse, play back, download, lock/unlock, and delete Smart Time Lapse recordings
   <img src="assets/screenshots/maps.webp" alt="Maps page" width="100%">
 </p>
 
-Shows the E-Maps set up in Surveillance Station: pick a map from the list and its image is drawn to fit the page, with a dot for every camera placed on it, green while the camera is enabled and red when it is disconnected or disabled (grey for a camera the account cannot see). Hover a dot for the camera's name, and click it to put the camera in Live View the same way a click in the camera sidebar does: into the selected slot, or alone in 1&times;1 when no slot is selected. The map last opened is remembered per connection profile. PNG, JPEG and SVG map images are drawn; one that cannot be decoded still shows its cameras on a blank map. The page says so instead when the NAS has no E-Maps or the account may not view them.
+Shows the E-Maps set up in Surveillance Station: pick a map from the list and its image is drawn to fit the page, with a dot for every camera placed on it, green while the camera is enabled and red when it is disconnected or disabled (grey for a camera the account cannot see). Hover a dot for the camera's name, and click it to put the camera in Live View the same way a click in the camera sidebar does: into the selected slot, or alone in 1&times;1 when no slot is selected. The map last opened is remembered per connection profile. PNG, JPEG and SVG map images are drawn; one that cannot be decoded still shows its cameras on a blank map. The page says so instead when the NAS has no E-Maps, the account may not view them, or the NAS's E-Map interface is older than the one the page reads.
 
 Maps are created and edited here too. **+** in the list header makes a new map from an image file (PNG, JPEG or SVG; the NAS stores PNG, so the others are converted first) under a name taken from the file, which can be changed but not reused: a second map of an existing name is refused. The pencil switches the selected map to editing: drag a dot to move the camera (it stays on the image), **Add camera…** lists the sidebar's cameras not yet on the map and drops the picked one at the centre to drag into place, and a right click on a dot offers **Remove**. **Save** asks first and then sends the whole marker list, since Surveillance Station replaces the list rather than merging it; the map is reloaded before the save and the save refused when its markers changed on the NAS meanwhile. **Discard** returns to what the NAS holds. Leaving the map, refreshing the list or changing the image with unsaved edits asks whether to save, discard or stay. **Change image…** gives the map another image and keeps its markers; **Delete map** asks and then removes the map. An account allowed to view maps but not edit them is told so at the first edit, and the page goes back to viewing only.
 </details>
@@ -223,7 +223,7 @@ Save multiple NAS connection profiles and switch between them from the login scr
 <details>
 <summary><b>Secure Credentials</b></summary>
 
-Passwords stored in your system keyring (GNOME Keyring, KWallet, macOS Keychain).
+Passwords stored in your system keyring (GNOME Keyring, KWallet, macOS Keychain). When a session expires the client logs in again with the password it connected with; if the NAS refuses that login, for instance because the password was changed elsewhere, two-factor authentication now asks for a code, or the account is disabled, blocked or locked, the client stops trying until you log in again, so it never keeps sending a login that cannot succeed.
 </details>
 <details>
 <summary><b>Theming</b></summary>
@@ -282,14 +282,14 @@ python -m surveillance                        # run directly from the source tre
 
 The same command also controls a client that is already running: a second
 launch hands its options over to the running instance and exits, with
-status 2 if an option is malformed. A first launch carries them out once
+status 2 if an option's value is invalid. A first launch carries them out once
 you are logged in and the camera list has loaded.
 
 ```sh
 surveillance --preset "Front of house"        # switch Live View to a named layout preset from config.toml
 surveillance --grid 3x3                       # switch Live View to a 1x1, 2x2, 3x3 or 4x4 grid
 surveillance --camera 12                      # show camera 12 in the slot the timeline tracks
-surveillance --camera 12 --fullscreen         # show camera 12 alone, in 1x1
+surveillance --camera 12 --solo               # show camera 12 alone, in 1x1
 surveillance --seek 2026-10-30T22:15          # play every slot from that time (local time unless it has a zone)
 surveillance --live                           # return every slot to live
 surveillance --page recordings                # or live, events, snapshots, timelapse, maps, settings
@@ -301,7 +301,7 @@ the NAS does not have, like anything else that cannot apply, is noted in
 the log and skipped. Camera IDs are the ones Surveillance Station numbers
 its cameras by, as used in the configuration file.
 
-Debug logs automatically redact passwords, session tokens, and usernames. A debug run also writes one line a minute recording the app's own memory use, open descriptors and thread count, so a long unattended session leaves a trend behind rather than just whatever state it ended in.
+Debug logs automatically redact passwords, session tokens, stream keys, and usernames. A debug run also writes one line a minute recording the app's own memory use, open descriptors and thread count, so a long unattended session leaves a trend behind rather than just whatever state it ended in.
 
 `--log-file` writes at the same level as stderr (WARNING, or DEBUG with
 `--debug`), and additionally captures the traceback of an uncaught exception
@@ -411,8 +411,8 @@ last_page = "live"             # last active page
 
 # Recording search filters (persisted from last search); the cameras
 # picked for them are kept per profile, see below
-# search_from_time = "2026-02-01T00:00:00"
-# search_to_time = "2026-02-19T23:59:59"
+# search_from_time = "2026-02-01T00:00:00+01:00"
+# search_to_time = "2026-02-19T23:59:59+01:00"
 # search_time_preset = "today"  # "today", "yesterday", "last24h", "last7d", "last30d", or ""
 
 [setting_overrides]
@@ -532,15 +532,17 @@ fisheye dewarp, mount and lens can also be configured from the UI: right-click a
 sidebar for its **Camera Settings**.
 
 `[webhooks]` is only ever set by hand; `events` defaults to all six and
-`timeout_seconds` to 3. The webhook targets get an `Authorization: Bearer`
-header when the keyring holds a token for the profile logged into, stored
-under the service `surveillance-station` as `<profile>:webhook_token`, the
-same way the login credentials are kept. With the `keyring` command that
-comes with the Python package of that name, for a profile named `home-nas`
-(it prompts for the token):
+`timeout_seconds` to 3. The client reads it when it starts, and on every
+save writes it back as it was then, entries it ignored included, so edit it
+with the client closed. A target gets an `Authorization: Bearer` header
+when the keyring holds a token for it, stored under the service
+`surveillance-station` as `webhook_token:` followed by the target URL
+exactly as written in `targets`, the same way the login credentials are
+kept. Each target only ever gets its own token. With the `keyring` command
+that comes with the Python package of that name (it prompts for the token):
 
 ```sh
-python3 -m keyring set surveillance-station home-nas:webhook_token
+python3 -m keyring set surveillance-station webhook_token:http://hub.example:8123/api/webhook/surveillance
 ```
 
 #### Live View stream profile
@@ -882,6 +884,7 @@ surveillance-station-client/
     ├── test_mpv_env_options.py
     ├── test_mpv_fence_workaround.py
     ├── test_mpv_profiles.py
+    ├── test_remote_actions.py
     ├── test_resource_log.py
     ├── test_rtsp_health.py
     ├── test_services.py
@@ -890,6 +893,7 @@ surveillance-station-client/
     ├── test_transactions.py
     ├── test_ui_behavior.py
     ├── test_update_check.py
+    ├── test_webhooks.py
     └── test_ws_bridge.py
 ```
 </details>
